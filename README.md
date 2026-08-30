@@ -19,6 +19,9 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin tha
 - **Accessible**: The lightbox is a proper `role="dialog"` with `aria-modal`, button `aria-label`s, and focus management (focus returns to the trigger on close)
 - **Smooth**: Adjacent images are prefetched so navigation feels instant
 - **Close**: Click backdrop, press Escape, or click ✕ to close
+- **Thumbnail grid**: When one AI message contains **multiple images**, they automatically collapse into a tidy **fixed 3-column grid** (9 images = 3×3, 6 = 3×2, even rows); the grid shows light, fast thumbnails (auto `?w=` resized, so large originals are not downloaded into small tiles)
+- **HD original on open**: Clicking any thumbnail opens the lightbox with the **full-resolution original image** (the `?w=` thumbnail param is stripped) — zooming in shows the real high-resolution file
+- **Clean UI**: The lightbox toolbar (download / close), prev/next arrows, counter and caption are **hidden whenever the lightbox is closed** — they only appear while you are actually viewing an image, so they never clutter the chat layout
 - **Auto-enhance**: MutationObserver automatically enhances new images added to the chat
 
 ### Installation
@@ -155,6 +158,9 @@ MIT
 - **无障碍**：lightbox 是标准的 `role="dialog"`（含 `aria-modal`、按钮 `aria-label` 与焦点管理，关闭后焦点回到触发元素）
 - **预取**：自动预取相邻图片，切换更顺滑
 - **关闭**：点击遮罩层、按 Esc 或点 ✕ 关闭
+- **缩略图网格**：当一条 AI 消息里包含**多张图片**时，自动折叠成整齐的**固定 3 列网格**（9 张=3×3、6 张=3×2，行数整齐）；网格显示轻量快速缩略图（自动 `?w=` 缩放，不会把大原图下载进小格子）
+- **点开即高清原图**：点击任意缩略图打开 lightbox 时，直接加载**全分辨率原图**（去掉 `?w=` 缩略参数），放大看到的是真正的原图清晰度
+- **界面干净**：lightbox 的工具按钮（下载/关闭）、左右切换箭头、计数、标题在 lightbox **关闭时全部隐藏**，仅在实际看图时才显示，不会在对话界面留下按钮干扰布局
 - **自动增强**：MutationObserver 自动增强新加入对话的图片
 
 ### 安装
