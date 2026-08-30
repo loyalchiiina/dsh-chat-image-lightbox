@@ -46,6 +46,64 @@ dsh plugin --profile desktop add @loyalchiiina/dsh-chat-image-lightbox
 
 **Note**: For the download button to trigger a save-as dialog, the image must be served from the same origin as your DSH instance (e.g., via the `/images/` route). Cross-origin images will open in a new tab instead.
 
+### Troubleshooting image display (important)
+
+When an image shows as blank, a blob of text, or the lightbox opens empty, check in this order:
+
+#### ① Images must use an http(s) URL — base64/data-URI and attachments are NOT rendered
+
+DSH renders images into `<img>` only from http(s) URLs. It does **not** render `data:image/png;base64,...` inline, nor "file-delivery/attachment" messages (those appear as tool-call text, not an image).
+
+- ✅ Correct — markdown + http URL:
+  ```
+  ![Description](http://127.0.0.1:<port>/images/your-image.jpg)
+  ```
+- ✅ Correct — any non-hotlink-protected external image:
+  ```
+  ![Description](https://some-cdn.com/image.jpg)
+  ```
+- ❌ Will NOT render — base64 inline:
+  ```
+  ![Description](data:image/png;base64,....)
+  ```
+
+#### ② Blank image / empty lightbox = hotlink protection on the image host (source limit, not this plugin)
+
+Some hosts (e.g. **Sina Weibo sinaimg**, some CDNs) enforce `Referer`-checking: a request without the expected `Referer` returns 403, so the image frame renders but no pixels load (clicking still opens the lightbox, but there is no image).
+
+- No normal webpage can hotlink these directly (including all sites except Weibo) — this is not something any plugin can fix.
+- **Workaround**: download the image to `~/.dsh/uploads/` (fetch with a proper `Referer`, or just save it from the browser), then serve it via `/images/`.
+
+Example — fetching a hotlink-protected image (Windows):
+```
+curl -e "https://weibo.com" -o image.jpg "https://wx1.sinaimg.cn/.../xxx.jpg"
+```
+
+#### ③ Supported image formats
+
+| Format | Rendered by browser | Notes |
+|--------|--------------------|-------|
+| jpg / jpeg / png / gif / webp / bmp / svg / ico | ✅ Yes | Mainstream formats — display + lightbox work |
+| **tiff** | ❌ No | Browsers cannot render tiff in `<img>`; no plugin can show it directly — convert to png/jpg first |
+| **heic** | ❌ No | Apple iPhone format — convert first |
+
+**Converting tiff / heic** (needs Python + Pillow):
+```sh
+python -c "from PIL import Image; Image.open('image.tif').convert('RGB').save('image.png')"
+# Downscale huge files first: Image.open('image.tif').convert('RGB').thumbnail((2000,2000)) then save
+```
+Put the resulting png in `~/.dsh/uploads/` and display via `/images/`.
+
+#### ④ Plugin not working after changes — restart fully
+
+After installing or editing plugin files, **fully quit all DSH Desktop processes** (Task Manager → end every `DSH Desktop.exe`) and reopen. Closing just the window does not quit (background processes stay). Old/unloaded code keeps the plugin inactive otherwise.
+
+#### ⑤ Is it actually the plugin? Quick checklist
+
+- Test with a `/images/`-served upload — if it displays and lightboxes, the plugin is fine.
+- Test with a non-hotlink-host image (e.g. `https://picsum.photos/800/600`) — if that works, the plugin is generic.
+- If neither uploads nor external images lightbox → the plugin client didn't load, usually because DSH wasn't fully restarted or the install is incomplete.
+
 ### Keyboard & Mouse
 
 | Action | Input |
@@ -123,6 +181,64 @@ dsh plugin --profile desktop add @loyalchiiina/dsh-chat-image-lightbox
 3. 图片会内联显示并自动带 lightbox 增强
 
 **注意**：下载按钮要弹出"另存为"对话框，图片必须从 DSH 同源路由提供（如 `/images/` 路由）。跨域图片会在新标签页打开。
+
+### 图片显示常见问题排查（重要）
+
+遇到"图片显示不出来 / 点开是空白 / 只看到一串文字"时，按以下顺序排查：
+
+#### ① 图片必须用 DSH 能识别的 URL 显示，不能依赖 base64 或附件
+
+DSH 对话只对**http(s) 图片 URL**渲染成 `<img>`，**不支持 `data:image/png;base64,...` 内嵌**，也不支持以"附件/文件交付"方式直接显示（那只会显示成工具调用文字）。
+
+- ✅ 正确：markdown 图片语法 + http URL
+  ```
+  ![描述](http://127.0.0.1:<端口>/images/你的图片.jpg)
+  ```
+- ✅ 正确：任意**无防盗链**的外链图片
+  ```
+  ![描述](https://某个图床.com/图片.jpg)
+  ```
+- ❌ 错误：base64 内嵌（DSH 渲染不出，只看到一串 `iVBORw0...`）
+  ```
+  ![描述](data:image/png;base64,....)   ← 不会显示
+  ```
+
+#### ② 图片空白 / 点开灯箱没图案 = 图源防盗链（图床限制，非插件问题）
+
+部分图床（如**新浪微博 sinaimg、部分 CDN**）强制 `Referer` 校验：请求不带特定 `Referer` 就返回 403，导致图片加载不出（有 `<img>` 框但内容空白，点击能弹灯箱但没图）。
+
+- 这类图**任何普通网页都无法直接外链显示**（包括微博自己以外的所有站点），不是本插件能解决的。
+- **解决办法**：把图下载到本地 `~/.dsh/uploads/`（可用带 `Referer` 的脚本抓取，或直接用浏览器保存），再通过 `/images/` 路由显示。
+
+示例：抓取带防盗链的图（Windows 下用带 Referer 的 curl 或脚本下载后放入 uploads）：
+```
+curl -e "https://weibo.com" -o 图.jpg "https://wx1.sinaimg.cn/.../xxx.jpg"
+```
+
+#### ③ 支持哪些图片格式
+
+| 格式 | 浏览器直接显示 | 说明 |
+|------|--------------|------|
+| jpg / jpeg / png / gif / webp / bmp / svg / ico | ✅ 支持 | 主流格式，直接显示 + 灯箱 |
+| **tiff** | ❌ 不支持 | **Web 浏览器 `<img>` 不原生渲染 tiff**，任何网页/插件都无法直接显示；需转成 png/jpg |
+| **heic** | ❌ 不支持 | 同上，苹果手机图片格式，需转码 |
+
+**tiff / heic 转码方法**（安装 Python + Pillow）：
+```sh
+python -c "from PIL import Image; Image.open('图.tif').convert('RGB').save('图.png')"
+# 超大图建议先缩小：Image.open('图.tif').convert('RGB').thumbnail((2000,2000)) 再 save
+```
+转出的 png 放到 `~/.dsh/uploads/`，用 `/images/` 显示。
+
+#### ④ 彻底重启后插件不生效
+
+改过插件文件或刚安装后，必须**彻底退出 DSH 进程再重开**（任务管理器结束所有 `DSH Desktop.exe` 进程），否则旧代码/未加载状态不生效。仅"关闭窗口"不算退出（后台进程残留）。
+
+#### ⑤ 判断是不是插件问题的清单
+
+- 用 `/images/` 上传图测：如果上传图正常显示 + 灯箱，说明插件正常
+- 换无防盗链图床（如 picsum.photos）的图测：正常则插件通用
+- 若上传图、外链图都不亮灯箱 → 插件 client 未加载，多半是没彻底重启或没装正确
 
 ### 键盘与鼠标
 
