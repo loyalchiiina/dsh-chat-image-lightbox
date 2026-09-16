@@ -1,7 +1,7 @@
 {
     "name": "@loyalchiiina/dsh-chat-image-lightbox",
     "description": "DSH plugin: display images inline in chat with lightbox zoom, download (save-as), and prev/next navigation",
-    "version": "1.2.0",
+    "version": "1.4.1",
     "type": "module",
     "main": "lib/index.js",
     "exports": {
@@ -43,5 +43,8 @@
     "bugs": {
         "url": "https://github.com/loyalchiiina/dsh-chat-image-lightbox/issues"
     },
-    "homepage": "https://github.com/loyalchiiina/dsh-chat-image-lightbox#readme"
+    "homepage": "https://github.com/loyalchiiina/dsh-chat-image-lightbox#readme",
+    "dependencies": {
+        "sharp": "0.34.4"
+    }
 }

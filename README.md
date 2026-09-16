@@ -19,8 +19,10 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin tha
 - **Accessible**: The lightbox is a proper `role="dialog"` with `aria-modal`, button `aria-label`s, and focus management (focus returns to the trigger on close)
 - **Smooth**: Adjacent images are prefetched so navigation feels instant
 - **Close**: Click backdrop, press Escape, or click ✕ to close
-- **Thumbnail grid**: When one AI message contains **multiple images**, they automatically collapse into a tidy **fixed 3-column grid** (9 images = 3×3, 6 = 3×2, even rows); the grid shows light, fast thumbnails (auto `?w=` resized, so large originals are not downloaded into small tiles)
-- **HD original on open**: Clicking any thumbnail opens the lightbox with the **full-resolution original image** (the `?w=` thumbnail param is stripped) — zooming in shows the real high-resolution file
+- **ZCode-style rendering**: chat images are styled in place — never moved, resized or reparented — so DSH's React virtual list is never fought with (no more vanished/duplicated images or console `removeChild` errors)
+- **Capped, not cropped**: every chat image renders with its aspect ratio preserved, capped at `min(460px, 64vh)` height (the ZCode look); charts and diagrams stay fully readable
+- **Responsive image row**: when one message contains **multiple images** in one container, they lay out as a responsive CSS-grid row — via a class on the container only, without moving any nodes
+- **HD original on open**: clicking any image opens the lightbox with the **full-resolution original image** — zooming in shows the real high-resolution file
 - **Clean UI**: The lightbox toolbar (download / close), prev/next arrows, counter and caption are **hidden whenever the lightbox is closed** — they only appear while you are actually viewing an image, so they never clutter the chat layout
 - **Auto-enhance**: MutationObserver automatically enhances new images added to the chat
 
@@ -84,18 +86,13 @@ curl -e "https://weibo.com" -o image.jpg "https://wx1.sinaimg.cn/.../xxx.jpg"
 
 #### ③ Supported image formats
 
-| Format | Rendered by browser | Notes |
-|--------|--------------------|-------|
-| jpg / jpeg / png / gif / webp / bmp / svg / ico | ✅ Yes | Mainstream formats — display + lightbox work |
-| **tiff** | ❌ No | Browsers cannot render tiff in `<img>`; no plugin can show it directly — convert to png/jpg first |
-| **heic** | ❌ No | Apple iPhone format — convert first |
+| Format | Displayed | Notes |
+|--------|-----------|-------|
+| jpg / jpeg / png / gif / webp / bmp / svg / ico / avif | ✅ Directly | Mainstream formats — display + lightbox work, bytes untouched |
+| **tiff / tif** | ✅ Via server conversion | Browsers can't render TIFF; the plugin server converts it to WebP at full original resolution (bundled `sharp`) — HD display, and download keeps the original `.tif` |
+| **heic** | ✅ Via server conversion | Same as TIFF — displayed as WebP, downloaded as the original `.heic` |
 
-**Converting tiff / heic** (needs Python + Pillow):
-```sh
-python -c "from PIL import Image; Image.open('image.tif').convert('RGB').save('image.png')"
-# Downscale huge files first: Image.open('image.tif').convert('RGB').thumbnail((2000,2000)) then save
-```
-Put the resulting png in `~/.dsh/uploads/` and display via `/images/`.
+Files go in `~/.dsh/uploads/` and display via `/images/` — no manual conversion needed.
 
 #### ④ Plugin not working after changes — restart fully
 
@@ -130,7 +127,7 @@ After installing or editing plugin files, **fully quit all DSH Desktop processes
 | Component | Description |
 |-----------|-------------|
 | **Host** (`lib/index.js`) | Registers `/images/` file-serving route and `/api/image-gallery/list` + `/api/image-gallery/root` APIs on `ctx.webServer` |
-| **Client** (`lib/client.js`) | Uses `MutationObserver` to watch for `<img>` elements in the chat, adds click handlers that open a lightbox overlay |
+| **Client** (`lib/client.js`) | Uses `MutationObserver` to watch for `<img>` elements in the chat, adds a display class + click handlers that open a lightbox overlay (class-only enhancement, no DOM restructuring) |
 
 ### Requirements
 
@@ -158,8 +155,11 @@ MIT
 - **无障碍**：lightbox 是标准的 `role="dialog"`（含 `aria-modal`、按钮 `aria-label` 与焦点管理，关闭后焦点回到触发元素）
 - **预取**：自动预取相邻图片，切换更顺滑
 - **关闭**：点击遮罩层、按 Esc 或点 ✕ 关闭
-- **缩略图网格**：当一条 AI 消息里包含**多张图片**时，自动折叠成整齐的**固定 3 列网格**（9 张=3×3、6 张=3×2，行数整齐）；网格显示轻量快速缩略图（自动 `?w=` 缩放，不会把大原图下载进小格子）
-- **点开即高清原图**：点击任意缩略图打开 lightbox 时，直接加载**全分辨率原图**（去掉 `?w=` 缩略参数），放大看到的是真正的原图清晰度
+- **ZCode 式渲染**：聊天图片原地加样式——**绝不搬移、改父级或重排 DOM 节点**，不与 DSH 的 React 虚拟列表打架（不再出现图片消失/重复、控制台 `removeChild` 报错）
+- **限高不裁剪**：每张聊天图保持原始纵横比，高度封顶 `min(460px, 64vh)`（ZCode 的观感）；图表、流程图不再被裁得没法看
+- **TIFF/HEIC 直显**：浏览器原生不渲染 TIFF——插件服务端用内置 sharp 将 TIFF/HEIC **按原始分辨率**即时转 WebP 显示（本地图表导出照样高清直显），下载按钮保存的仍是原始 `.tif`/`.heic` 文件
+- **多图九宫格**：一条消息里有多张图时自动排成整齐网格（约 3 列），文字段落横跨整行排在网格上方——纯 CSS（`display:contents`），不搬任何节点
+- **点开即高清**：点击任意图片打开 lightbox 看全分辨率大图，放大看到每个像素；下载永远保存原始文件
 - **界面干净**：lightbox 的工具按钮（下载/关闭）、左右切换箭头、计数、标题在 lightbox **关闭时全部隐藏**，仅在实际看图时才显示，不会在对话界面留下按钮干扰布局
 - **自动增强**：MutationObserver 自动增强新加入对话的图片
 
@@ -223,18 +223,13 @@ curl -e "https://weibo.com" -o 图.jpg "https://wx1.sinaimg.cn/.../xxx.jpg"
 
 #### ③ 支持哪些图片格式
 
-| 格式 | 浏览器直接显示 | 说明 |
-|------|--------------|------|
-| jpg / jpeg / png / gif / webp / bmp / svg / ico | ✅ 支持 | 主流格式，直接显示 + 灯箱 |
-| **tiff** | ❌ 不支持 | **Web 浏览器 `<img>` 不原生渲染 tiff**，任何网页/插件都无法直接显示；需转成 png/jpg |
-| **heic** | ❌ 不支持 | 同上，苹果手机图片格式，需转码 |
+| 格式 | 显示 | 说明 |
+|------|------|------|
+| jpg / jpeg / png / gif / webp / bmp / svg / ico / avif | ✅ 直接显示 | 主流格式，直接显示 + 灯箱，字节原样不动 |
+| **tiff / tif** | ✅ 服务端转码显示 | 浏览器不能渲染 TIFF，插件服务端用内置 sharp 按原始分辨率转 WebP 显示——高清直显，下载仍是原始 `.tif` 文件 |
+| **heic** | ✅ 服务端转码显示 | 同 TIFF——显示为 WebP，下载保存原始 `.heic` |
 
-**tiff / heic 转码方法**（安装 Python + Pillow）：
-```sh
-python -c "from PIL import Image; Image.open('图.tif').convert('RGB').save('图.png')"
-# 超大图建议先缩小：Image.open('图.tif').convert('RGB').thumbnail((2000,2000)) 再 save
-```
-转出的 png 放到 `~/.dsh/uploads/`，用 `/images/` 显示。
+图片放到 `~/.dsh/uploads/`，用 `/images/` 显示——无需手工转码。
 
 #### ④ 彻底重启后插件不生效
 
@@ -269,7 +264,7 @@ python -c "from PIL import Image; Image.open('图.tif').convert('RGB').save('图
 | 组件 | 说明 |
 |------|------|
 | **Host** (`lib/index.js`) | 在 `ctx.webServer` 上注册 `/images/` 文件服务路由和 `/api/image-gallery/list` + `/api/image-gallery/root` 接口 |
-| **Client** (`lib/client.js`) | 用 `MutationObserver` 监听对话中的 `<img>` 元素，添加点击处理器打开 lightbox |
+| **Client** (`lib/client.js`) | 用 `MutationObserver` 监听对话中的 `<img>` 元素，添加展示样式与点击处理器打开 lightbox（只加 class，不改 DOM 结构） |
 
 ### 环境要求
 
