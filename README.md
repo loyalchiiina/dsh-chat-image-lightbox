@@ -1,12 +1,31 @@
-# DSH Chat Image Lightbox
+# DSH Chat Image Lightbox 🖼
+
+**对话里的图，值得被认真看。**
+
+**Images in chat deserve a proper look.**
 
 [English](#english) | [中文](#中文)
+
+> 📦 **npm 包名 / npm package name**：`@loyalchiiina/dsh-chat-image-lightbox`
+> GitHub 仓库名是 `dsh-chat-image-lightbox`，但 npm 上带 scope 前缀，安装时请用完整名。
+> The GitHub repo is `dsh-chat-image-lightbox`; the npm package is scoped — use the full name when installing.
+
+```bash
+dsh plugin --profile desktop add @loyalchiiina/dsh-chat-image-lightbox
+```
+
+![图片灯箱全屏查看](docs/images/chat-image-lightbox.png)
+
+> 灯箱全屏态：原图完整显示（自动适配屏幕高度），右上角是「⬇ 下载」与「✕ 关闭」按钮；同一条消息里的其他图片可用方向键连续浏览。
+> Full-screen lightbox: the image auto-fits the viewport, with ⬇ download and ✕ close in the top-right; arrow keys page through the other images in the same message.
 
 ---
 
 ## English
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin that displays images inline in the chat with a lightbox overlay — zoom, download (save-as dialog), and prev/next navigation.
+
+Pictures from your agent sit tiny inside a bubble — to see detail you have to save them and open elsewhere. With this plugin, **one click opens any chat image full-screen**: zoom, drag-pan, download, and flip through the others in the same message.
 
 ### Features
 
