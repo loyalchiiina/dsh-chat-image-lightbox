@@ -13,8 +13,9 @@
         "lib/**/*.js",
         "cordis.patch.yml",
         "README.md",
-        "LICENSE"
-    ],
+        "LICENSE",
+        "docs/images/**"
+      ],
     "license": "MIT",
     "dsh": {
         "bundle": {
