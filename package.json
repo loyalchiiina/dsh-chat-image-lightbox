@@ -1,7 +1,7 @@
 {
     "name": "@loyalchiiina/dsh-chat-image-lightbox",
-    "description": "DSH plugin: display images inline in chat with lightbox zoom, download (save-as), and prev/next navigation",
-    "version": "1.4.1",
+    "description": "对话里的图，值得被认真看：点一下全屏打开灯箱，支持滚轮缩放、拖拽平移、下载另存、左右翻看同一消息里的其他图片，键盘方向键与 Esc 快捷操作，自动适配屏幕高度。不改动对话渲染，与宿主 React 虚拟列表和平共处。桌面端 + 网页端双端可用。| Images in chat deserve a proper look: one click opens a full-screen lightbox with scroll-to-zoom, drag-pan, download/save-as and prev/next navigation, plus keyboard and touch controls. Non-intrusive — never alters chat rendering or fights the host React virtual list.",
+    "version": "1.4.2",
     "type": "module",
     "main": "lib/index.js",
     "exports": {

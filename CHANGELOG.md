@@ -1,5 +1,17 @@
 # Changelog
 
+
+## 1.4.2 — bilingual description and README hero
+
+- **package.json description rewritten as a bilingual value proposition**: leads
+  with "对话里的图，值得被认真看 / Images in chat deserve a proper look", then
+  lists the capabilities (full-screen lightbox, scroll zoom, drag pan, download,
+  prev/next, keyboard and touch controls, non-intrusive to host rendering).
+- **README hero section added**: bilingual hook plus the package-name callout
+  making clear the npm package is scoped (`@loyalchiiina/dsh-chat-image-lightbox`)
+  while the GitHub repo is not — the two names differ, and users searching npm by
+  the repo name previously hit a 404. Includes the lightbox screenshot with a
+  caption. All existing English and Chinese documentation is unchanged.
 ## 1.4.1 — fix ghost toolbar residue
 
 - fix(client): **close the lightbox with `display:none` after the fade-out** —
