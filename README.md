@@ -21,6 +21,60 @@ dsh plugin --profile desktop add @loyalchiiina/dsh-chat-image-lightbox
 
 ---
 
+## 功能总览 · At a glance（中英对照 / Bilingual）
+
+### 灯箱查看 · Lightbox viewer
+
+| 中文 | English |
+|---|---|
+| 点击任意对话图片进入全屏灯箱 | Click any chat image for a full-screen lightbox |
+| 滚轮缩放、拖拽平移 | Wheel zoom, drag to pan |
+| 工具栏缩放按钮 ⊕ ⊖ 与 1× 复位 | Toolbar ⊕ / ⊖ zoom buttons with 1× reset |
+| 方向键平移视角（按住连续移动） | D-pad moves the view (press-and-hold repeats) |
+| 左右翻页：按钮 / 键盘 / 触屏滑动 | Prev/next via toolbar, keyboard or swipe |
+| 下载原图（自动识别扩展名） | Download original (extension auto-detected) |
+| 复制图片文件绝对路径 | Copy the image's absolute local path |
+| 在文件夹中显示（资源管理器定位） | Reveal in folder (file manager locates the file) |
+
+### 会话级图片控制 · Conversation-wide controls
+
+| 中文 | English |
+|---|---|
+| 一键把整个会话图片收成缩略图网格 | Collapse every image in the conversation into a thumbnail grid |
+| 网格列数可调（1–12，设置被记住） | Configurable columns per row (1–12, remembered) |
+| 一键隐藏 / 展开所有图片 | Hide / restore all images at once |
+| 跳图定位：左键上一张、右键下一张、三连最远/最近 | Jump: left = prev, right = next, triple = farthest / nearest |
+| 落点闪一下高亮 | Landing block flashes briefly |
+
+### 格式与清晰度 · Formats & fidelity
+
+| 中文 | English |
+|---|---|
+| **TIFF/TIF、HEIC 自动转换显示** | TIFF/TIF, HEIC auto-transcode for display |
+| TIFF/PNG/BMP **无损原像素**（逐像素零误差） | TIFF/PNG/BMP lossless, **native pixels** (bit-exact) |
+| 2 亿像素大图流畅显示 | 200-megapixel images display smoothly |
+| 11 种格式实测支持（JPG/PNG/WebP/GIF/AVIF/SVG/BMP…） | 11 formats verified (JPG/PNG/WebP/GIF/AVIF/SVG/BMP…) |
+
+### 宿主侧工具 · Host-side tool (`display_image`)
+
+| 中文 | English |
+|---|---|
+| 关键词搜网图（花瓣/Bing/搜狗 3 源回退） | Keyword image search (Huaban / Bing / Sogou fallback) |
+| 搜图自动过滤广告与他人面孔 | Auto-filters adverts & other celebrities |
+| 本地文件/目录直读（TIFF/HEIC 转码） | Read local files/dirs (TIFF/HEIC transcoded) |
+| 网图落地保存到本地目录 | Save remote images to a local folder |
+| 代理自动探活（无需手配） | Auto proxy discovery (TCP probe) |
+
+### 隐私与安全 · Privacy & safety
+
+| 中文 | English |
+|---|---|
+| 一切本地服务仅回环（loopback-only） | All local services are loopback-only |
+| 打开文件夹用参数化调用，绝不拼接 shell 命令 | "Show in folder" spawns argv, never a shell string |
+| 保存说明不回显本机路径 | No local paths echoed in confirmations |
+
+---
+
 ## English
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin that displays images inline in the chat with a lightbox overlay — zoom, download (save-as dialog), and prev/next navigation.
