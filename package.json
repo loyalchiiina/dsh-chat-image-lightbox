@@ -1,7 +1,7 @@
 {
     "name": "@loyalchiiina/dsh-chat-image-lightbox",
-    "description": "对话里的图值得被认真看：点一下全屏灯箱，支持缩放、拖拽平移、下载另存、左右翻页，键盘与触摸操作。| Images in chat deserve a proper look: click for a full-screen lightbox with zoom, drag pan, download and prev/next navigation.",
-    "version": "1.4.3",
+    "description": "对话里的图值得被认真看：点一下全屏灯箱（缩放/拖拽平移/下载另存/左右翻页），会话内一键把图收成可调列数的缩略图网格或整块隐藏，还能跳到下一张/上一张图片位置；本地图支持 TIFF/HEIC 自动转码。| Chat images get a proper look: full-screen lightbox (zoom / drag pan / download / prev-next), plus one-click conversation-wide thumbnail grid (configurable columns) or hide, jump-to-image navigation, and TIFF/HEIC transcoding for local files.",
+    "version": "1.6.0",
     "type": "module",
     "main": "lib/index.js",
     "exports": {

@@ -43,7 +43,13 @@ Pictures from your agent sit tiny inside a bubble — to see detail you have to 
 - **Responsive image row**: when one message contains **multiple images** in one container, they lay out as a responsive CSS-grid row — via a class on the container only, without moving any nodes
 - **HD original on open**: clicking any image opens the lightbox with the **full-resolution original image** — zooming in shows the real high-resolution file
 - **Clean UI**: The lightbox toolbar (download / close), prev/next arrows, counter and caption are **hidden whenever the lightbox is closed** — they only appear while you are actually viewing an image, so they never clutter the chat layout
-- **Auto-enhance**: MutationObserver automatically enhances new images added to the chat
+- **Zoom / pan pad**: the lightbox also has explicit controls for what the gestures do — `⊖` `⊕` `1×` for zoom with a live percentage readout, and a d-pad for moving the view (press and hold to keep moving). Wheel, drag and `+`/`-`/`Shift+arrow` all still work
+- **Conversation-wide image controls in one popover**: a single compact **「🖼 图片」** trigger sits next to the access-mode control and slides out a panel holding all four actions — no row of buttons cluttering the composer
+- **Thumbnail grid with configurable columns**: one click collapses **every** image block in the conversation into a CSS grid of small tiles (captions span the full row). A number field sets the **columns per row (1–12)**, remembered across reloads
+- **Hide / show whole blocks**: one click hides every image (each block collapses to a slim strip), another click brings them back intact
+- **Jump to image**: one button for locating images — **left click** steps to the previous image, **right click** to the next; **left triple-click** jumps to the farthest image from the viewport centre, **right triple-click** to the nearest. The landing block flashes. Stepping is relative to the last landed block and stops at the ends
+- **Auto-enhance**: MutationObserver automatically enhances new images added to the chat, and re-adopts images whose class a React re-render overwrote
+- **Bring images into the chat (`display_image` tool, host side)**: one tool takes a local `path` (file **or** directory — TIFF/HEIC transcoded, optional downscale), a remote `url`, or a `query` (keyword image search: Huaban first, Bing as fallback) and returns ready-to-paste Markdown. Any file on this machine can be served in place via `/images/?abs=<path>` (loopback-only), no copying into the gallery root required
 
 ### Installation
 
@@ -180,7 +186,13 @@ MIT
 - **多图九宫格**：一条消息里有多张图时自动排成整齐网格（约 3 列），文字段落横跨整行排在网格上方——纯 CSS（`display:contents`），不搬任何节点
 - **点开即高清**：点击任意图片打开 lightbox 看全分辨率大图，放大看到每个像素；下载永远保存原始文件
 - **界面干净**：lightbox 的工具按钮（下载/关闭）、左右切换箭头、计数、标题在 lightbox **关闭时全部隐藏**，仅在实际看图时才显示，不会在对话界面留下按钮干扰布局
-- **自动增强**：MutationObserver 自动增强新加入对话的图片
+- **灯箱缩放/平移面板**：手势能做的都给了一组显式按钮——`⊖` `⊕` `1×` 缩放（带实时百分比），加一组方向键移动视角（**按住可连续移动**）；滚轮、拖拽、`+`/`-`/`Shift+方向键` 全部保留
+- **会话内图片控制收进一个弹出面板**：输入框旁的「完全权限」右侧只留一个紧凑的 **「🖼 图片」** 触发器，点它滑出面板，四个操作都在里面——不再让一排按钮占着输入区
+- **可调列数的缩略图网格**：一键把**整个会话**的图片收成小图网格（标题横跨整行）；面板里有「列」输入框可设**每行几张（1–12）**，设置会被记住（刷新/重启后仍生效）
+- **整块隐藏 / 展开**：一键隐藏所有图片（每个图片块收成一条窄边），再点一下原样恢复——所有内联样式按块追踪并清理，图片不会丢
+- **跳图定位**：一个按钮定位图片——**左键**跳到上一张、**右键**跳到下一张；**左键三连**跳到离屏幕中心最远的一张、**右键三连**跳到最近的一张；落点会闪一下。步进是相对「上次落点」的，并且**到头即止不回绕**（回绕会让人以为方向反了）
+- **自动增强**：MutationObserver 自动增强新加入对话的图片；React 重渲染覆盖 class 后也会自动重新接管
+- **把图带进对话（宿主侧 `display_image` 工具）**：一个工具吃三种输入——本地 `path`（文件**或**目录，TIFF/HEIC 自动转码、可缩放）、网络 `url` 直链、`query` 关键词搜图（花瓣优先，Bing 回退），返回可直接粘贴的 Markdown。本机任意文件可通过 `/images/?abs=<路径>` 原地直读（仅限本机回环），无需先复制进图库目录
 
 ### 安装
 
