@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.0 — display_image results now actually render in chat
+
+> DSH only renders an image card for the built-in `read_image` tool; every
+> other tool's result (including `display_image`) was shown as plain text, so
+> markdown image URLs never became visible images. The client now registers the
+> official `tool.call.toolview` slot for `display_image` and renders the
+> returned image URLs as real `<img>` elements — lightbox, thumbnail grid and
+> hide-all apply to them automatically via the existing MutationObserver.
+
+- fix(client): register `tool.call.toolview` (key `display_image`) so
+  display_image results render inline images instead of raw markdown text.
+- dep(client): the client entry now injects `slots` and requires `react`
+  (both provided by the DSH client runtime).
+
+
 ## 1.6.0 — native-resolution TIFF, copy-path & show-in-folder
 
 > 本地 TIFF 改为默认**原像素无损显示**（纠正了一个把"64MB 大小上限导致的静默 404"
