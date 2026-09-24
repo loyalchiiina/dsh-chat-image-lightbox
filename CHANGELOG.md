@@ -1,3 +1,17 @@
+## 1.7.1 — fix: display_image images vanished after a moment
+
+- fix(client): **images rendered by the `display_image` toolview row no longer
+  disappear right after they appear.** The row is a `tool.call.toolview` slot,
+  not a message block, so its `<img>` elements were invisible to
+  `allBlocks()`/`syncFoldState` — yet `isChatImage()` still adopted them. That
+  produced a tug-of-war: the MutationObserver re-applied our class on every
+  mutation while React's next render wiped `className` again, and the row
+  eventually got unmounted. Symptoms: images flash once, then vanish; scrolling
+  back does not restore them; image size is irrelevant.
+- fix(client): the toolview `<img>` now carries `data-dsh-ig-skip="1"` plus
+  `className="dsh-ig-toolimg"`, and `isChatImage()` returns early for both —
+  so the enhancer leaves tool-result images alone. Regular chat images are
+  unaffected.
 # Changelog
 
 ## 1.7.0 — display_image results now actually render in chat
