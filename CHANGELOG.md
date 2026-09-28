@@ -14,6 +14,18 @@
   unaffected.
 # Changelog
 
+## 1.7.3 — docs: feature screenshots
+
+- docs: four screenshots added under `docs/images/` and embedded in the README, one
+  section each — `lightbox.png` (full-screen viewer), `columns-3col.png` and
+  `columns-multi.png` (thumbnail grid at different column counts), and
+  `hide-images.png` (hide / restore).
+- chore: `files[]` now lists those four images individually instead of globbing
+  `docs/images/**`, so the package is not published with the older 1.8 MB hero
+  image that is no longer referenced anywhere. Tarball: 2.0 MB → 1.4 MB.
+
+No functional change; the code is identical to 1.7.2.
+
 ## 1.7.2 — thumbnails/hide finalised, jump removed, hotlink fallback, no DOM reparenting
 
 > Verified end to end on **DSH NEXT 2.0.15**. Minimum kernel: **DSH 2.0.14**.
