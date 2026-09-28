@@ -14,13 +14,13 @@
 dsh plugin --profile desktop add @loyalchiiina/dsh-chat-image-lightbox
 ```
 
-> **当前版本 / Current version**：`1.7.2`
+> **当前版本 / Current version**：`1.7.3`
 > **适用内核 / Requires**：DSH **2.0.14 及以上**（已在 **DSH NEXT 2.0.15** 上完整验证）。
 > DSH **2.0.14+** (fully verified on **DSH NEXT 2.0.15**).
 
-> ⚠️ **升级到 1.7.2 前请注意 / Before upgrading to 1.7.2**
-> 1.7.2 **移除了「跳图」功能**（该功能在多次迭代中不够稳定，已整体删除，界面上不再出现 ⌖ 按钮）。
-> 1.7.2 **removed the jump-to-image feature** — it proved unreliable across iterations and has been deleted outright; no ⌖ button appears anymore.
+> ⚠️ **升级到 1.7.3 前请注意 / Before upgrading to 1.7.3**
+> 1.7.2 起 **移除了「跳图」功能**（该功能在多次迭代中不够稳定，已整体删除，界面上不再出现 ⌖ 按钮）。
+> Since 1.7.2 the **jump-to-image feature was removed** — it proved unreliable across iterations and has been deleted outright; no ⌖ button appears anymore.
 
 ## 效果预览 · Screenshots
 
