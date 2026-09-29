@@ -1,3 +1,3 @@
 - insert:
-    - id: image-gallery
-      name: '@loyalchiiina/dsh-chat-image-lightbox'
+    - id: dsh-chat-image-lightbox
+      name: dsh-chat-image-lightbox

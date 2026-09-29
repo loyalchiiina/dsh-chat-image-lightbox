@@ -1,3 +1,26 @@
+## 1.7.4 - rename to unscoped package, official DSH peer declarations
+
+- **Package renamed `@loyalchiiina/dsh-chat-image-lightbox` to `dsh-chat-image-lightbox`**
+  (unscoped). The Cordis patch row `id`, `name`, and the client bundle's
+  `__ModuleLoader__.load({ id })` all use the new bare name, so the three
+  identities stay aligned.
+- The patch row `id` was `image-gallery` and no longer matched the package
+  name; it is now the full package name.
+- **Added official DSH compatibility declarations.** The kernel checks
+  `peerDependencies` on `@deepseek-ai/dsh` / `@deepseek-ai/dsh-*`
+  (it does **not** read `engines.dsh` - see the official
+  `packages/boot/app-boot/README.md`): `peerDependencies` now declare
+  `@deepseek-ai/cordis` `^4.0.2` and `@deepseek-ai/dsh` `>=0.1.7-rc.1`,
+  mirrored in `devDependencies`.
+- `engines.dsh` previously held a **client/shell** version (`>=2.0.14`);
+  it now states the **kernel** version (`>=0.1.7-rc.1`). Note that `^0.1.7`
+  would *not* match the pre-release kernel `0.1.7-rc.2`, which is why the
+  range is written with an explicit pre-release floor.
+
+No functional change to the lightbox, thumbnail grid, hide/show, TIFF/HEIC
+transcoding or hotlink fallback behaviour.
+
+
 ## 1.7.1 — fix: display_image images vanished after a moment
 
 - fix(client): **images rendered by the `display_image` toolview row no longer

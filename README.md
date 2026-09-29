@@ -6,12 +6,12 @@
 
 [English](#english) | [中文](#中文)
 
-> 📦 **npm 包名 / npm package name**：`@loyalchiiina/dsh-chat-image-lightbox`
+> 📦 **npm 包名 / npm package name**：`dsh-chat-image-lightbox`
 > GitHub 仓库名是 `dsh-chat-image-lightbox`，但 npm 上带 scope 前缀，安装时请用完整名。
 > The GitHub repo is `dsh-chat-image-lightbox`; the npm package is scoped — use the full name when installing.
 
 ```bash
-dsh plugin --profile desktop add @loyalchiiina/dsh-chat-image-lightbox
+dsh plugin --profile desktop add dsh-chat-image-lightbox
 ```
 
 > **当前版本 / Current version**：`1.7.3`
@@ -148,13 +148,13 @@ Pictures from your agent sit tiny inside a bubble — to see detail you have to 
 #### Method 1: npm (recommended)
 
 ```sh
-dsh plugin --profile desktop add @loyalchiiina/dsh-chat-image-lightbox
+dsh plugin --profile desktop add dsh-chat-image-lightbox
 ```
 
 #### Method 2: Manual
 
-1. Copy the `lib/` folder and `cordis.patch.yml` to your DSH profile's `node_modules/@loyalchiiina/dsh-chat-image-lightbox/`
-2. Add `@loyalchiiina/dsh-chat-image-lightbox` to your profile's `package.json` → `dsh.profile.bundles` array
+1. Copy the `lib/` folder and `cordis.patch.yml` to your DSH profile's `node_modules/dsh-chat-image-lightbox/`
+2. Add `dsh-chat-image-lightbox` to your profile's `package.json` → `dsh.profile.bundles` array
 3. Restart DSH Desktop
 
 ### Usage
@@ -296,13 +296,13 @@ MIT
 #### 方式一：npm（推荐）
 
 ```sh
-dsh plugin --profile desktop add @loyalchiiina/dsh-chat-image-lightbox
+dsh plugin --profile desktop add dsh-chat-image-lightbox
 ```
 
 #### 方式二：手动安装
 
-1. 把 `lib/` 文件夹和 `cordis.patch.yml` 复制到 DSH profile 的 `node_modules/@loyalchiiina/dsh-chat-image-lightbox/`
-2. 在 profile 的 `package.json` → `dsh.profile.bundles` 数组中添加 `@loyalchiiina/dsh-chat-image-lightbox`
+1. 把 `lib/` 文件夹和 `cordis.patch.yml` 复制到 DSH profile 的 `node_modules/dsh-chat-image-lightbox/`
+2. 在 profile 的 `package.json` → `dsh.profile.bundles` 数组中添加 `dsh-chat-image-lightbox`
 3. 重启 DSH Desktop
 
 ### 使用方法
