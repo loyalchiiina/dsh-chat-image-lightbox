@@ -1,14 +1,28 @@
 # DSH Chat Image Lightbox 🖼
 
+> ### 🛠 v1.7.5 — 发图片失败已修复 / Image-sending bug fixed
+>
+> **如果你在 DSH 里发图片失败**（报 `prompt rejected` + `ERR_DLOPEN_FAILED` + `session/agent-busy`，纯文字正常），
+> 那是 **1.7.4 及更早**的已知问题，**1.7.5 已修复**。升级 + 重启 DSH 即可：
+>
+> ```sh
+> pnpm add dsh-chat-image-lightbox@latest
+> ```
+>
+> 原因：本插件旧版把 `sharp` 精确锁在 `0.34.4`，与 DSH 内核的 `^0.35.3` 冲突，两个版本争抢同名 `libvips-42.dll`。
+> 详见 [Release v1.7.5](https://github.com/loyalchiiina/dsh-chat-image-lightbox/releases/tag/v1.7.5) · 排查见 [⑥ 发图失败](#发图片时提示-sessionagent-busy-errdlopenfailed175-已修复) 与 [Troubleshooting ⑥](#sending-an-image-fails-with-sessionagent-busy-errdlopenfailed-fixed-in-175)。
+>
+> **If sending an image fails** with those errors (plain text works fine), it is a known issue in **1.7.4 and earlier**, **fixed in 1.7.5**. Upgrade and restart DSH. Cause: the old version pinned `sharp` to `0.34.4`, conflicting with the kernel's `^0.35.3` over the same-named `libvips-42.dll`.
+
 **对话里的图，值得被认真看。**
 
 **Images in chat deserve a proper look.**
 
 [English](#english) | [中文](#中文)
 
-> 📦 **npm 包名 / npm package name**：`dsh-chat-image-lightbox`
-> GitHub 仓库名是 `dsh-chat-image-lightbox`，但 npm 上带 scope 前缀，安装时请用完整名。
-> The GitHub repo is `dsh-chat-image-lightbox`; the npm package is scoped — use the full name when installing.
+> 📦 **npm 包名 / npm package name**：`dsh-chat-image-lightbox`（无 scope / unscoped）
+> 旧包名 `@loyalchiiina/dsh-chat-image-lightbox` 已被取代，历史版本已标记弃用。
+> The legacy scoped name `@loyalchiiina/dsh-chat-image-lightbox` is superseded; its older versions are deprecated.
 
 ```bash
 dsh plugin --profile desktop add dsh-chat-image-lightbox
