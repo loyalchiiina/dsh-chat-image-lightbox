@@ -1,3 +1,27 @@
+## 1.7.5 — fix: sharp version conflict broke image sending in DSH
+
+- fix(deps): **`sharp` is now declared as `^0.35.3` instead of the exact
+  `0.34.4`.** The DSH kernel (`@deepseek-ai/dsh-attachment-local`) depends on
+  `sharp: ^0.35.3` from its very first release, so pinning `0.34.4` here forced
+  **two different sharp versions into the same process**.
+- Why that broke things: both sharp builds load a DLL named
+  **`libvips-42.dll`** (identical filename), but they need different companions
+  — `libvips-cpp-8.17.2.dll` for sharp 0.34.x vs `libvips-cpp-8.18.3.dll` for
+  sharp 0.35.x. **Windows resolves DLLs by filename**, so whichever version
+  loaded first won the namespace. When this plugin loaded `0.34.4` first, the
+  kernel's subsequent `0.35.3` load failed with
+  `ERR_DLOPEN_FAILED: The specified procedure could not be found`.
+- The visible symptom was **sending any image in chat failed**, reported as
+  `prompt rejected (session/agent-busy)` — a misleading wrapper the kernel uses
+  for unclassified errors, which is why the real cause was hard to spot.
+- **No plugin code changed.** All six sharp APIs this plugin uses
+  (`metadata`, `rotate`, `resize({width, withoutEnlargement})`,
+  `png({compressionLevel})`, `webp({quality})`, `toBuffer`) were verified
+  compatible with 0.35.3, and the TIFF→PNG path was confirmed
+  **pixel-identical** (lossless) on 0.35.3.
+- The `^` range (rather than another exact pin) lets this dependency follow the
+  kernel instead of drifting out of sync again.
+
 ## 1.7.4 - rename to unscoped package, official DSH peer declarations
 
 - **Package renamed `@loyalchiiina/dsh-chat-image-lightbox` to `dsh-chat-image-lightbox`**

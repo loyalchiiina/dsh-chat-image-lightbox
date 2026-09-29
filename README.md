@@ -221,6 +221,28 @@ After installing or editing plugin files, **fully quit all DSH Desktop processes
 - Test with a non-hotlink-host image (e.g. `https://picsum.photos/800/600`) — if that works, the plugin is generic.
 - If neither uploads nor external images lightbox → the plugin client didn't load, usually because DSH wasn't fully restarted or the install is incomplete.
 
+#### ⑥ Sending an image fails with `session/agent-busy` / `ERR_DLOPEN_FAILED` (fixed in 1.7.5)
+
+If **sending an image** fails with:
+
+```
+prompt rejected: Could not load the "sharp" module using the win32-x64 runtime
+ERR_DLOPEN_FAILED: The specified procedure could not be found.
+(session/agent-busy)
+```
+
+this is a known issue in **1.7.4 and earlier**, **fixed in 1.7.5**. Just upgrade:
+
+```
+pnpm add dsh-chat-image-lightbox@latest
+```
+
+**Why it happened**: the DSH kernel ships `sharp ^0.35.3`, while older versions of this plugin **pinned sharp to exactly `0.34.4`** — putting two different sharp builds into one process. They load a DLL with the **same filename** (`libvips-42.dll`) but need different companions (`libvips-cpp-8.17.2.dll` for 0.34.x vs `libvips-cpp-8.18.3.dll` for 0.35.x). **Windows resolves DLLs by filename**, so whichever loads first claims the name and the other fails with "the specified procedure could not be found".
+
+The trailing `agent-busy` is a generic wrapper the kernel applies to **unclassified errors** — it has nothing to do with actual concurrency, which is why the real cause is hard to spot from the message alone.
+
+> Note: this only ever affected **sending images**; plain text chat was never impacted.
+
 ### Keyboard & Mouse
 
 | Action | Input |
@@ -251,7 +273,7 @@ After installing or editing plugin files, **fully quit all DSH Desktop processes
 - **DSH ≥ 2.0.14** — this release is verified end to end on **DSH NEXT 2.0.15**. The client half relies on `@deepseek-ai/dsh-client-ui-tool` being injectable, which is why 2.0.14 is the floor.
 - Host must expose the `webServer` service (standard in DSH Desktop).
 - Node.js ≥ 22
-- `sharp` 0.34.4 (declared as a dependency; it is what performs the lossless TIFF/HEIC transcoding)
+- `sharp` `^0.35.3` (declared as a dependency; it is what performs the lossless TIFF/HEIC transcoding). The range follows the DSH kernel's own `^0.35.3` — an exact pin here would put two different sharp builds into one process and break image sending (see Troubleshooting).
 - **Windows note**: "show in folder" uses `explorer /select,`
 
 ### License
@@ -369,6 +391,28 @@ curl -e "https://weibo.com" -o 图.jpg "https://wx1.sinaimg.cn/.../xxx.jpg"
 - 换无防盗链图床（如 picsum.photos）的图测：正常则插件通用
 - 若上传图、外链图都不亮灯箱 → 插件 client 未加载，多半是没彻底重启或没装正确
 
+#### ⑥ 发图片时提示 `session/agent-busy` / `ERR_DLOPEN_FAILED`（1.7.5 已修复）
+
+如果**发图片**时报错：
+
+```
+prompt rejected: Could not load the "sharp" module using the win32-x64 runtime
+ERR_DLOPEN_FAILED: The specified procedure could not be found.
+(session/agent-busy)
+```
+
+这是 **1.7.4 及更早版本**的已知问题，**1.7.5 已修复**。升级即可：
+
+```
+pnpm add dsh-chat-image-lightbox@latest
+```
+
+**为什么会这样**：DSH 内核自带 `sharp ^0.35.3`，而旧版本把本插件的 sharp **精确锁定在 0.34.4**，于是同一个进程里出现了两个不同版本的 sharp。它们加载的 DLL **同名**（都叫 `libvips-42.dll`），但各自需要不同的配套文件（0.34.x 要 `libvips-cpp-8.17.2.dll`，0.35.x 要 `libvips-cpp-8.18.3.dll`）。**Windows 按文件名解析 DLL**——谁先加载谁占住，后来者就报"找不到指定的过程"。
+
+报错末尾的 `agent-busy`（会话忙）是 DSH 对**无法分类的错误**套用的通用标签，与实际是否繁忙无关，因此很难一眼看出真因。
+
+> 注：此问题只影响**发图片**，纯文字对话始终正常。
+
 ### 键盘与鼠标
 
 | 操作 | 输入 |
@@ -399,7 +443,7 @@ curl -e "https://weibo.com" -o 图.jpg "https://wx1.sinaimg.cn/.../xxx.jpg"
 - **DSH ≥ 2.0.14** —— 本版本已在 **DSH NEXT 2.0.15** 上完整验证。浏览器端依赖 `@deepseek-ai/dsh-client-ui-tool` 可被注入，这是 2.0.14 作为下限的原因。
 - 宿主需提供 `webServer` 服务（DSH 桌面端标准配置）。
 - Node.js ≥ 22
-- `sharp` 0.34.4（已声明为依赖，TIFF/HEIC 的无损转码由它完成）
+- `sharp` `^0.35.3`（已声明为依赖，TIFF/HEIC 的无损转码由它完成）。采用区间跟随 DSH 内核自身的 `^0.35.3`——若在此精确锁版，会让两个不同 sharp 版本共存于同一进程，导致**发图失败**（见「图片显示常见问题排查」）。
 - **Windows 说明**：「在文件夹中显示」使用 `explorer /select,`
 
 ### 许可证
