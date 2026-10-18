@@ -1,5 +1,15 @@
 # DSH Chat Image Lightbox 🖼
 
+> ### 🛡 v1.7.8 — 强制图片出现在正文里 / Images must land in the reply body
+>
+> **工具行是折叠的，用户看不到。** 从 1.7.8 起插件会在 system prompt 里常驻一条铁律，
+> 要求模型把每张交付的图**写进回复正文**（`![](…)`），不许只依赖 `display_image` 的工具调用行。
+> 这解决的是「图其实渲染好了、但用户以为没发」的经典误判。
+>
+> **Tool rows are collapsed — the user never sees them.** Since 1.7.8 the plugin keeps a resident
+> system-prompt rule requiring every delivered image to appear in the reply body, not only inside the
+> `display_image` tool row. Opt out with `config.injectImageLaw: false`.
+
 > ### 🛠 v1.7.5 — 发图片失败已修复 / Image-sending bug fixed
 >
 > **如果你在 DSH 里发图片失败**（报 `prompt rejected` + `ERR_DLOPEN_FAILED` + `session/agent-busy`，纯文字正常），
@@ -28,7 +38,7 @@
 dsh plugin --profile desktop add dsh-chat-image-lightbox
 ```
 
-> **当前版本 / Current version**：`1.7.3`
+> **当前版本 / Current version**：`1.7.8`
 > **适用内核 / Requires**：DSH **2.0.14 及以上**（已在 **DSH NEXT 2.0.15** 上完整验证）。
 > DSH **2.0.14+** (fully verified on **DSH NEXT 2.0.15**).
 
@@ -156,6 +166,7 @@ Pictures from your agent sit tiny inside a bubble — to see detail you have to 
 - **Auto-enhance**: MutationObserver automatically enhances new images added to the chat, and re-adopts images whose class a React re-render overwrote
 - **Bring images into the chat (`display_image` tool, host side)**: one tool takes a local `path` (file **or** directory — TIFF/HEIC transcoded, optional downscale), a remote `url`, or a `query` (keyword image search: Huaban first, Bing as fallback) and returns ready-to-paste Markdown. Any file on this machine can be served in place via `/images/?abs=<path>` (loopback-only), no copying into the gallery root required
 - **Hotlink fallback (1.7.2)**: a search result can answer `200` and still fail in the browser, because some CDNs (Huaban via Tencent EdgeOne) reject any request whose `Referer` is not their own domain — the picture then shows as "无法预览". The tool now probes each URL the way a browser would and **only** re-saves the ones that would be blocked, so working links stay direct and nothing is downloaded unnecessarily
+- **Image-delivery law (1.7.8)**: the plugin keeps a resident system-prompt rule (`image-gallery:delivery-law`, order 1500) requiring every delivered image to appear **in the reply body** as `![](…)` markdown rather than only inside the `display_image` tool row. **Tool rows are collapsed by default**, so a user scrolling the transcript sees nothing and reasonably concludes no image was sent. The rule also forbids "see above" / "sent N images" phrasing and forbids passing off a file path or a bare link as a delivered image. Opt out with `config.injectImageLaw: false`.
 
 ### Installation
 
@@ -326,6 +337,7 @@ MIT
 - **自动增强**：MutationObserver 自动增强新加入对话的图片；React 重渲染覆盖 class 后也会自动重新接管
 - **把图带进对话（宿主侧 `display_image` 工具）**：一个工具吃三种输入——本地 `path`（文件**或**目录，TIFF/HEIC 自动转码、可缩放）、网络 `url` 直链、`query` 关键词搜图（花瓣优先，Bing 回退），返回可直接粘贴的 Markdown。本机任意文件可通过 `/images/?abs=<路径>` 原地直读（仅限本机回环），无需先复制进图库目录
 - **防盗链自动降级（1.7.2）**：搜图结果可能返回 `200` 却在浏览器里显示不出来——部分 CDN（花瓣走腾讯云 EdgeOne）会拒绝 `Referer` 不是自家域名的请求，图片于是显示成「无法预览」。工具现在会**按浏览器的方式逐张探测**，**只把会被拦的那几张**转存到本地，能直连的保持直连，不浪费带宽
+- **图片投递铁律（1.7.8）**：插件会在 system prompt 里常驻一条规则（`image-gallery:delivery-law`，order 1500），要求模型**把每张交付的图写进回复正文**（`![](…)` markdown），而不是只放在 `display_image` 的工具调用行里。因为**工具行默认折叠**，用户滚动正文时看不到折叠区内容，会合理认为「根本没发图」。铁律同时禁止「见上文」「已发送 N 张」这类不落图的写法，也禁止把文件路径或普通链接当成图片交付。想关掉：在 profile 的 cordis patch 里给本插件加 `config.injectImageLaw: false`
 
 ### 安装
 

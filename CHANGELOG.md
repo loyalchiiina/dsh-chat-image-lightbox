@@ -1,3 +1,66 @@
+## 1.7.8 — 2026-10-18
+
+### 图片投递铁律（防"以为没发图"）
+
+**问题**：图片渲染修好后仍然存在人机沟通层面的漏洞——`display_image` 的图只出现在**工具调用行**里，而工具行默认是折叠的。用户上下滚动正文时看不到折叠区里的内容，于是合理地认为"你根本没发图"。这不是渲染 bug，是**交付契约缺失**。
+
+**修复**：插件宿主半边新增一条常驻 system prompt section（`image-gallery:delivery-law`，order 1500，503 字符），强制模型遵守：
+
+1. 交付图片必须写在**回复正文**里（`![](…)` markdown），不得只依赖工具调用行。
+2. 一次发多张时正文按序逐个粘贴，不许写成「见上文」「已发送 N 张」。
+3. 路径不是图、链接文本不是图。
+4. 工具返回的 markdown 就是最终形态，原样贴，不改写、不加反引号。
+
+**为什么用 prompt section 而不是技能**：技能是按需加载的，prompt section 是常驻的——装插件即生效，不依赖任何技能被加载。
+
+**关闭方式**：在 profile 的 cordis patch 里给本插件加 `config.injectImageLaw: false`。
+
+**实现细节**：
+- `inject` 从 `["webServer","tools"]` 扩展为 `["webServer","tools","systemPrompt"]`。
+- `apply(ctx)` → `apply(ctx, config)`。
+- 注册走 `ctx.effect(...)`，随插件 dispose 一起回收；`systemPrompt` 服务缺失时降级为 `logger.warn` 而非崩溃。
+- 用 mock ctx 实跑 `apply` 验证：`SECTION name=image-gallery:delivery-law order=1500 chars=503` 正常注册，5 条路由与 `display_image` 工具注册均不受影响。
+
+### Enforce image delivery in the conversation body
+
+**Problem**: even after the rendering fix, a `display_image` picture only lived inside the (collapsed by default) tool call row. Scrolling the transcript, the user sees no image and concludes nothing was sent.
+
+**Fix**: the host half now registers a resident system-prompt section (`image-gallery:delivery-law`, order 1500, 503 chars) that requires the model to (1) put every delivered image in the reply body as `![](…)`, (2) paste them one by one when sending several, (3) never treat a file path or a bare link as a delivered image, and (4) paste the tool's markdown verbatim.
+
+**Why a prompt section, not a skill**: skills are loaded on demand; a prompt section is resident, so installing the plugin is enough.
+
+**Opt out**: set `config.injectImageLaw: false` on the plugin's row in the profile patch.
+
+## 1.7.7 — 2026-10-18
+
+### 桌面端图片不显示（根因修复）
+
+**症状**：DSH 桌面端对话里，`display_image` 的图片变成 `🔧 工具调用 · display_image` 折叠行，图片完全不出现；同一张图用 `/images/?abs=...` 相对路径却能正常加载。
+
+**根因**：桌面端外壳把页面跑在自定义协议 `dsh-app://app` 下（`location.origin === "dsh-app://app"`、`location.port === ""`）。宿主半边 `baseUrl()` 产出的绝对 URL `http://127.0.0.1:<port>/images/...` 因此是**跨源请求**，Chromium 在渲染进程里直接拒绝——实测 `fetch` 得到 `TypeError: Failed to fetch`、`<img>` 触发 `error`，请求根本没离开渲染进程，所以宿主日志里 `/images/` 命中数为 0。
+
+**修复**：所有面向浏览器的一半都改用**根相对路径**。
+- `lib/index.js`：`baseUrl()` 返回 `""`，`localUrl()` 于是产出 `/images/?abs=...`。页面与路由在桌面自定义协议和网页端都同源，相对路径两边都对。
+- `lib/client.js`：`igImageUrls()` 正则放宽为 `(?:https?://|/)`，接受根相对 markdown 源；`igDiag()` 的 POST 目标改 `/api/image-gallery/diag`。
+
+**为何不能"继续用端口"**：自定义协议源到 `127.0.0.1` 的跳转属 Chromium 的私有网络访问限制，补端口无用；只有同源相对路径可靠。
+
+**验证**：探针在真实页面里对比两种形式——相对 `/images/?abs=...` → `200 image/webp`，200x355，27116 bytes，`img.onload` 触发；绝对 `http://127.0.0.1:<port>/images/?abs=...` → `Failed to fetch` + `img.onerror`。
+
+### Desktop: images did not render (root-cause fix)
+
+**Symptom**: in the DSH desktop app a `display_image` picture collapsed into a `Tool call · display_image` row instead of the image, while the very same file loaded fine through a root-relative `/images/?abs=...` URL.
+
+**Root cause**: the desktop shell serves the conversation from the custom protocol `dsh-app://app` (`location.origin === "dsh-app://app"`, `location.port === ""`). The host half's `baseUrl()` produced absolute `http://127.0.0.1:<port>/images/...` URLs, which are **cross-origin** from that scheme and are rejected inside the renderer — measured `fetch` → `TypeError: Failed to fetch`, `<img>` → `error`, and the request never reached the server (zero `/images/` hits in the host log).
+
+**Fix**: every browser-facing piece now emits **root-relative** URLs.
+- `lib/index.js`: `baseUrl()` returns `""`, so `localUrl()` yields `/images/?abs=...`. Route and page share an origin on both the desktop custom protocol and the web build.
+- `lib/client.js`: `igImageUrls()` now accepts `(?:https?://|/)` sources, and `igDiag()` posts to `/api/image-gallery/diag`.
+
+**Why the port cannot be kept**: a custom-scheme origin reaching `127.0.0.1` trips Chromium's private-network rules; only a same-origin relative path is reliable.
+
+**Verification**: an in-page probe compared both forms — relative `/images/?abs=...` → `200 image/webp`, 200x355, 27116 bytes, `img.onload` fired; absolute `http://127.0.0.1:<port>/images/?abs=...` → `Failed to fetch` + `img.onerror`.
+
 ## 1.7.6 — 2026-10-14
 
 ### 合规性改进（无功能改动）
