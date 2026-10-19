@@ -39,8 +39,8 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 ```
 
 > **当前版本 / Current version**：`1.7.8`
-> **适用内核 / Requires**：DSH **2.0.14 及以上**（已在 **DSH NEXT 2.0.15** 上完整验证）。
-> DSH **2.0.14+** (fully verified on **DSH NEXT 2.0.15**).
+> **适用内核 / Requires**：本包声明 `engines.dsh: ">=0.1.7-rc.1"` 与 `peerDependencies["@deepseek-ai/dsh"]: ">=0.1.7-rc.1"`（不硬绑具体内核版本）；本版实测验证于 **DSH NEXT 2.0.18-next**，客户端组件 `@deepseek-ai/dsh-client-ui-tool` 实测 `0.2.1-alpha.2`。
+> This package declares `engines.dsh: ">=0.1.7-rc.1"` and `peerDependencies["@deepseek-ai/dsh"]: ">=0.1.7-rc.1"` (no hard pin to a specific kernel); this release was verified end to end on **DSH NEXT 2.0.18-next**, with `@deepseek-ai/dsh-client-ui-tool` measured at `0.2.1-alpha.2`.
 
 > ⚠️ **升级到 1.7.3 前请注意 / Before upgrading to 1.7.3**
 > 1.7.2 起 **移除了「跳图」功能**（该功能在多次迭代中不够稳定，已整体删除，界面上不再出现 ⌖ 按钮）。
@@ -144,7 +144,7 @@ Pictures from your agent sit tiny inside a bubble — to see detail you have to 
 ### Features
 
 - **Inline display**: Images in AI responses render directly in the chat (via markdown `![alt](url)`)
-- **Click to zoom**: Click any image to open a full-screen lightbox; click again to zoom back out
+- **Click to zoom**: Click any image to open a full-screen lightbox; clicking the enlarged image zooms in again, and clicking while already zoomed **closes** the lightbox (the zoomed image covers the backdrop, so this guarantees the close target is reachable). `Esc` or clicking the backdrop also closes it.
 - **Scroll to zoom & pan**: When zoomed in, use the mouse wheel to zoom further and drag to pan around the image
 - **Download**: Click the download button ⬇ to save the image (triggers browser save-as dialog for same-origin images; filename is sanitized and the extension is derived from the image type)
 - **Navigation**: Left/right arrow buttons, keyboard arrows, or swipe left/right on touch devices to switch between multiple images
@@ -185,11 +185,19 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 ### Usage
 
 1. Place images in `~/.dsh/uploads/` (or any directory served by your DSH instance)
-2. In your AI response, use markdown image syntax:
+2. In your AI response, use markdown image syntax with a **root-relative** path:
    ```
-   ![Description](http://127.0.0.1:<port>/images/your-image.jpg)
+   ![Description](/images/?abs=<url-encoded absolute path>)
    ```
 3. The image will display inline with lightbox enhancement
+
+> ⚠️ **Never use `http://127.0.0.1:<port>/images/...`.** DSH Desktop renders the GUI
+> inside the custom protocol `dsh-app://app`, so the loopback `http://` origin is a
+> *different* origin: Chromium blocks it in the renderer before the request ever
+> reaches the web server (`fetch` throws `TypeError: Failed to fetch`, `<img>` fires
+> `onerror`). Root-relative paths inherit the page origin (`dsh-app://app`) and are
+> forwarded correctly — measured `200 / image/webp / 120×213`. The host half has
+> emitted root-relative URLs since v1.7.7; v1.7.8 in this repo only documents it.
 
 **Note**: For the download button to trigger a save-as dialog, the image must be served from the same origin as your DSH instance (e.g., via the `/images/` route). Cross-origin images will open in a new tab instead.
 
@@ -197,17 +205,21 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 
 When an image shows as blank, a blob of text, or the lightbox opens empty, check in this order:
 
-#### ① Images must use an http(s) URL — base64/data-URI and attachments are NOT rendered
+#### ① Images must use an http(s) URL or a root-relative path — base64/data-URI and attachments are NOT rendered
 
-DSH renders images into `<img>` only from http(s) URLs. It does **not** render `data:image/png;base64,...` inline, nor "file-delivery/attachment" messages (those appear as tool-call text, not an image).
+DSH renders images into `<img>` only from http(s) URLs **or site-root-relative paths**. It does **not** render `data:image/png;base64,...` inline, nor "file-delivery/attachment" messages (those appear as tool-call text, not an image).
 
-- ✅ Correct — markdown + http URL:
+- ✅ Correct — markdown + **root-relative** path (what the `display_image` tool emits):
   ```
-  ![Description](http://127.0.0.1:<port>/images/your-image.jpg)
+  ![Description](/images/?abs=C%3A%5CUsers%5Cme%5Cpic.jpg)
   ```
 - ✅ Correct — any non-hotlink-protected external image:
   ```
   ![Description](https://some-cdn.com/image.jpg)
+  ```
+- ❌ Will NOT render — absolute loopback URL (blocked cross-origin under `dsh-app://app`):
+  ```
+  ![Description](http://127.0.0.1:<port>/images/your-image.jpg)
   ```
 - ❌ Will NOT render — base64 inline:
   ```
@@ -285,17 +297,19 @@ The trailing `agent-busy` is a generic wrapper the kernel applies to **unclassif
 | `/images/<path>` | GET | Serve an uploaded image (loopback-only, with extension/security guards) |
 | `/api/image-gallery/list` | GET | List images under the gallery root; supports `?limit=N` |
 | `/api/image-gallery/root` | GET | Return the configured gallery root path |
+| `/api/image-gallery/reveal` | POST | Reveal a file in the OS file manager (Explorer / Finder) |
+| `/api/image-gallery/diag` | POST | Append a line to `~/.dsh/image-gallery-diag.log` (client-side debug sink; no-op unless `IG_DEBUG` is on) |
 
 ### How It Works
 
 | Component | Description |
 |-----------|-------------|
-| **Host** (`lib/index.js`) | Registers `/images/` file-serving route and `/api/image-gallery/list` + `/api/image-gallery/root` APIs on `ctx.webServer` |
+| **Host** (`lib/index.js`) | Registers `/images/` file-serving route plus 4 `/api/image-gallery/*` exact routes (`list`, `root`, `reveal`, `diag`) on `ctx.webServer` |
 | **Client** (`lib/client.js`) | Uses `MutationObserver` to watch for `<img>` elements in the chat, adds a display class + click handlers that open a lightbox overlay (class-only enhancement, no DOM restructuring) |
 
 ### Requirements
 
-- **DSH ≥ 2.0.14** — this release is verified end to end on **DSH NEXT 2.0.15**. The client half relies on `@deepseek-ai/dsh-client-ui-tool` being injectable, which is why 2.0.14 is the floor.
+- **DSH kernel** — the package declares `engines.dsh: ">=0.1.7-rc.1"` (and the same floor in `peerDependencies`), with no hard pin; this release was verified end to end on **DSH NEXT 2.0.18-next**. The client half relies on `@deepseek-ai/dsh-client-ui-tool` being injectable (measured `0.2.1-alpha.2`).
 - Host must expose the `webServer` service (standard in DSH Desktop).
 - Node.js ≥ 22
 - `sharp` `^0.35.3` (declared as a dependency; it is what performs the lossless TIFF/HEIC transcoding). The range follows the DSH kernel's own `^0.35.3` — an exact pin here would put two different sharp builds into one process and break image sending (see Troubleshooting).
@@ -314,7 +328,7 @@ MIT
 ### 功能
 
 - **内联显示**：AI 回复中的图片直接在对话框渲染（通过 markdown `![描述](url)`）
-- **点击放大**：点击任意图片打开全屏 lightbox，再点一次缩回
+- **点击放大**：点击任意图片打开全屏 lightbox；在原始比例下点图会放大到 1.6 倍，**已放大时再点一下则关闭灯箱**（放大的图会盖住背景，这样保证点得到关闭目标）。`Esc` 或点击背景同样可关闭。
 - **滚轮缩放 + 拖拽平移**：放大后可用鼠标滚轮继续缩放，按住拖拽平移查看细节
 - **下载**：点击下载按钮 ⬇ 保存图片（同源图片弹出"另存为"对话框；文件名会清洗，扩展名按图片类型自动补全）
 - **切换**：左右箭头按钮、键盘方向键，或在触屏上左右滑动切换多张图片
@@ -356,11 +370,13 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 ### 使用方法
 
 1. 把图片放到 `~/.dsh/uploads/` 目录（或 DSH 实例提供的任意目录）
-2. AI 回复中使用 markdown 图片语法：
+2. AI 回复中使用 markdown 图片语法，路径用**站内根相对**：
    ```
-   ![描述](http://127.0.0.1:<端口>/images/你的图片.jpg)
+   ![描述](/images/?abs=<URL 编码后的绝对路径>)
    ```
 3. 图片会内联显示并自动带 lightbox 增强
+
+> ⚠️ **绝对不要用 `http://127.0.0.1:<端口>/images/...`。** DSH 桌面端把界面跑在自定义协议 `dsh-app://app` 下，`http://` 回环地址对页面而言是**另一个源**，Chromium 在渲染进程里直接拦掉，请求根本到不了 webServer（`fetch` 抛 `TypeError: Failed to fetch`，`<img>` 触发 `onerror`）。站内根相对路径继承页面源（`dsh-app://app`）才会被正确转发——实测 `200 / image/webp / 120×213`。宿主侧自 v1.7.7 起就一直输出根相对 URL，v1.7.8 只是把这条写进文档。
 
 **注意**：下载按钮要弹出"另存为"对话框，图片必须从 DSH 同源路由提供（如 `/images/` 路由）。跨域图片会在新标签页打开。
 
@@ -368,17 +384,21 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 
 遇到"图片显示不出来 / 点开是空白 / 只看到一串文字"时，按以下顺序排查：
 
-#### ① 图片必须用 DSH 能识别的 URL 显示，不能依赖 base64 或附件
+#### ① 图片必须用 http(s) 外链或站内根相对路径，不能依赖 base64 或附件
 
-DSH 对话只对**http(s) 图片 URL**渲染成 `<img>`，**不支持 `data:image/png;base64,...` 内嵌**，也不支持以"附件/文件交付"方式直接显示（那只会显示成工具调用文字）。
+DSH 对话只对**http(s) 图片 URL** 或**站内根相对路径**渲染成 `<img>`，**不支持 `data:image/png;base64,...` 内嵌**，也不支持以"附件/文件交付"方式直接显示（那只会显示成工具调用文字）。
 
-- ✅ 正确：markdown 图片语法 + http URL
+- ✅ 正确：markdown 图片语法 + **站内根相对**路径（`display_image` 工具输出的就是这个）
   ```
-  ![描述](http://127.0.0.1:<端口>/images/你的图片.jpg)
+  ![描述](/images/?abs=C%3A%5CUsers%5C我%5C图片.jpg)
   ```
 - ✅ 正确：任意**无防盗链**的外链图片
   ```
   ![描述](https://某个图床.com/图片.jpg)
+  ```
+- ❌ 错误：回环绝对地址（`dsh-app://app` 下跨源被拦，永远加载不出）
+  ```
+  ![描述](http://127.0.0.1:<端口>/images/你的图片.jpg)
   ```
 - ❌ 错误：base64 内嵌（DSH 渲染不出，只看到一串 `iVBORw0...`）
   ```
@@ -456,17 +476,19 @@ pnpm add dsh-chat-image-lightbox@latest
 | `/images/<path>` | GET | 提供上传图片（仅本机回环，带扩展名/安全校验） |
 | `/api/image-gallery/list` | GET | 列出图库根目录下图片，支持 `?limit=N` |
 | `/api/image-gallery/root` | GET | 返回配置的图库根目录路径 |
+| `/api/image-gallery/reveal` | POST | 在系统文件管理器（资源管理器 / Finder）中定位并选中某个文件 |
+| `/api/image-gallery/diag` | POST | 向 `~/.dsh/image-gallery-diag.log` 追加一行（客户端调试通道；`IG_DEBUG` 关闭时无实际写入） |
 
 ### 工作原理
 
 | 组件 | 说明 |
 |------|------|
-| **Host** (`lib/index.js`) | 在 `ctx.webServer` 上注册 `/images/` 文件服务路由和 `/api/image-gallery/list` + `/api/image-gallery/root` 接口 |
+| **Host** (`lib/index.js`) | 在 `ctx.webServer` 上注册 `/images/` 文件服务路由 + 4 条 `/api/image-gallery/*` 精确路由（`list`、`root`、`reveal`、`diag`） |
 | **Client** (`lib/client.js`) | 用 `MutationObserver` 监听对话中的 `<img>` 元素，添加展示样式与点击处理器打开 lightbox（只加 class，不改 DOM 结构） |
 
 ### 环境要求
 
-- **DSH ≥ 2.0.14** —— 本版本已在 **DSH NEXT 2.0.15** 上完整验证。浏览器端依赖 `@deepseek-ai/dsh-client-ui-tool` 可被注入，这是 2.0.14 作为下限的原因。
+- **DSH 内核** —— 本包声明 `engines.dsh: ">=0.1.7-rc.1"`（`peerDependencies` 同下限），不硬绑具体内核版本；本版实测验证于 **DSH NEXT 2.0.18-next**。浏览器端依赖 `@deepseek-ai/dsh-client-ui-tool` 可被注入（实测 `0.2.1-alpha.2`）。
 - 宿主需提供 `webServer` 服务（DSH 桌面端标准配置）。
 - Node.js ≥ 22
 - `sharp` `^0.35.3`（已声明为依赖，TIFF/HEIC 的无损转码由它完成）。采用区间跟随 DSH 内核自身的 `^0.35.3`——若在此精确锁版，会让两个不同 sharp 版本共存于同一进程，导致**发图失败**（见「图片显示常见问题排查」）。

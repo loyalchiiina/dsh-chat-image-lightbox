@@ -1,3 +1,29 @@
+## 1.7.9 — 2026-10-19
+
+### 文档与代码对齐（无功能改动）
+
+逐条核对 README / locale / package.json 与 `lib/index.js` / `lib/client.js` 的真实行为，修正 5 处不符。
+
+| # | 位置 | 原写法 | 实际行为 | 取证 |
+|---|---|---|---|---|
+| 1 | README.md:190 / :206 / :361 / :377（中英共 4 处） | 教用户写 `![x](http://127.0.0.1:<port>/images/…)` | **这正是 1.7.7 修掉的故障写法**。桌面端页面 origin 是 `dsh-app://app`，绝对回环地址是跨源，Chromium 在渲染进程直接拦，请求到不了 webServer。必须用站内根相对 `/images/?abs=…` | 1.7.7 探针实测：相对路径 `200 / image/webp / nw=120 nh=213`；绝对 `fetch` 抛 `TypeError: Failed to fetch`、`img onerror` |
+| 2 | README.md API 表（中英各一份） | 只列 3 条路由 | 实际 **5 条**，漏 `/api/image-gallery/reveal`（POST，在文件管理器定位）与 `/api/image-gallery/diag`（POST，客户端调试日志） | `lib/index.js:1044-1048` `webServer.register` 五处 |
+| 3 | README.md:42-43 / :312 / :491 | 「DSH **2.0.14** 及以上」「已在 DSH NEXT **2.0.15** 验证」 | 与 `package.json` 不符：`engines.dsh` 与 `peerDependencies["@deepseek-ai/dsh"]` 都是 **`>=0.1.7-rc.1`**（不硬绑内核版本）。实测环境是 **2.0.18-next** | `package.json` `engines.dsh`；asar 读 `/package.json` = `dsh-desktop-next 2.0.18-next` |
+| 4 | README.md:147 / :331 | 「再点一次缩回」 | `lib/client.js:646-651`：`zoomScale > 1` 时点击图片是 **`close()` 关闭灯箱**，不是缩回原比例 | `lightboxImg.addEventListener("click", …)` → `if (zoomScale > 1) { close(); return; }` |
+| 5 | `locale/zh.json:4` / `locale/en.json:4` | 「支持缩放、多列布局与一键隐藏图片」 | 漏了 TIFF/HEIC 无损转码、防盗链自动转存、下载另存、左右翻页、图片投递铁律 | 与 `package.json` description 逐项比对 |
+
+### 同步内容
+
+- `package.json` `version` 1.7.8 → **1.7.9**
+- `locale/zh.json` / `locale/en.json` 的 `meta.description` 重写（补齐转码 / 转存 / 下载翻页 / 投递铁律）
+- README 中英两侧各 5 处修正
+
+### 教训
+
+1. **修复代码后必须回头改文档**：1.7.7 把 URL 改成根相对是正确修复，但 README 里 4 处教学示例仍写着旧写法，等于**官方文档在教用户触发同一个 bug**。这类「文档残留正好是刚修掉的坑」最难被用户识别——他们照文档写，然后报「还是显示不出来」。
+2. **版本下限要抄 `package.json`，不要凭印象**：README 写 2.0.14 是历史遗留，而包实际声明 `>=0.1.7-rc.1`。后者才是 npm 安装时真正生效的约束。
+3. API 表这类清单必须用 `grep webServer.register` 生成，手写必然漏。
+
 ## 1.7.8 — 2026-10-18
 
 ### 图片投递铁律（防"以为没发图"）

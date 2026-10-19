@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Chat Image Lightbox",
-    "description": "Click any chat image to open a full-screen lightbox with zoom, column layouts and a hide-images toggle."
+    "description": "Click a chat image for a full-screen lightbox with zoom, drag-pan, save-as download and prev/next paging; collapse the whole conversation into a thumbnail grid with adjustable columns or hide all images. TIFF/HEIC is transcoded losslessly, hotlink-protected images are cached locally, and images are forced into the reply body instead of a collapsed tool row."
   }
 }
