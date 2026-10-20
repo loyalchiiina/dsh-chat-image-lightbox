@@ -150,10 +150,16 @@ definition 块在宿主 `renderNode` 里 `return null`，`renderBlocks` 又 `.fi
 node test/probe-rowclear.mjs       # 18 项：clear 插入位置/幂等/多段
 node test/probe-poprole.mjs        # 15 项：role=dialog 只在打开时存在
 node test/probe-source-health.mjs  # 37 项：图源健康降级 / 转存并发 / 缓存上限 / 搜狗 forbid
-node test/run-all.mjs --full       # 上面 3 个 + 实验室 11 套件 = 14 套件，一条命令全跑
+node test/probe-tool-result.mjs    # 39 项：返回值过宿主两道闸门（IG_TOOL_ONLINE=1 → 45 项含真搜图）
+node test/run-all.mjs --full       # 上面 4 个 + 实验室 11 套件 = 15 套件，一条命令全跑
 ```
 
 > `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 37/37。
+
+> 🔴 **`probe-tool-result.mjs` 的存在理由（1.8.2 的代价换来的）**：1.8.1 的 14 套件全绿，却在用户重启后**搜图 100% 报错** —— 因为所有旧探针都只测到 `searchImages` 这一层函数，**从不构造真实工具返回值**，也就从不经过宿主的两道闸门：
+> ① 无损 JSON（嵌套 `undefined`/`NaN`/`Infinity`/`-0` → 整条结果被丢，报 `value is not lossless JSON`）；
+> ② `output.schema` 的 `additionalProperties: false`（未声明字段 → 整条结果被丢）。
+> 所以**任何新增的返回值字段都必须同时过这两关**，探针用「真 `apply()` + 真 `execute()` + 复刻两道闸门」来钉死；负控必须在**删掉该字段的 reduced schema** 上做（拿现 schema 做负控等于自欺）。
 
 ### 4.2 实验室 11 套件（`E:\tmp\lightbox-lab`）
 
@@ -236,7 +242,8 @@ unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source
 - [ ] `node test/probe-rowclear.mjs` 18/0
 - [ ] `node test/probe-poprole.mjs` 15/0
 - [ ] `node test/probe-source-health.mjs` 37/0
-- [ ] `node test/run-all.mjs --full` 14 套件全绿（一条命令代替逐条手跑）
+- [ ] `node test/probe-tool-result.mjs` 39/0（改过返回值/`output.schema` 时必须）
+- [ ] `node test/run-all.mjs --full` 15 套件全绿（一条命令代替逐条手跑）
 - [ ] `E:\tmp\lightbox-lab` 11 套件全绿
 - [ ] 网格布局视觉验证：发 ≥10 张图，确认「并列 / 等高 / 末行补齐 / 文字回左端」
 - [ ] 正文无路径泄漏（引用式定义行不上屏）

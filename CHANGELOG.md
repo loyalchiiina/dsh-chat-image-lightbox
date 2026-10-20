@@ -1,3 +1,48 @@
+## 1.8.2 — 2026-10-21
+
+### 🔴 修：搜图 100% 报错——返回值被 DSH 两道闸门整条丢弃（1.8.1 引入的回归）
+
+**症状（用户重启后实测）**：
+
+- `display_image(query="毛晓彤")`、`display_image(query="猫")`（复现 2 次）→
+  `Error: tool "display_image" returned invalid output: value is not lossless JSON` —— 一张图都发不出来。
+- `display_image(query="毛晓彤", source="huaban")` →
+  `Error: ... "value.images[0].rescueError" is not a declared property (additionalProperties: false)`。
+
+**根因：宿主对工具返回值有两道独立闸门，任一处不过就丢弃整条结果**（读 DSH 宿主 `app.asar` 源码证实）：
+
+1. **无损 JSON**：`visitJsonValue` 要求每个键可枚举、数字 `Number.isFinite` 且 `!== -0`；源码注释原文
+   `"Nested \`undefined\`, \`NaN\`, and infinities stay rejected."`
+2. **`output.schema` + `additionalProperties: false`**：返回值出现未声明字段，整条结果作废。
+
+对上 1.8.1 的两处改动：
+
+- 1.8.1 把 Bing 提到 `SOURCES` 首位，而 **Bing 结果不带宽高**，旧映射写的是
+  `width: typeof r.width === "number" ? r.width : undefined` → 每次搜图都带 undefined 键 → 闸门①拒收。
+- 1.8.1 新加的 `it.rescueError = ...`（本意是把静默失败如实说出来）忘了在
+  `output.schema.images.items.properties` 里声明 → 闸门②拒收。
+
+**为什么 1.8.1 的 14 套件全绿却没挡住**：旧探针只测到 `searchImages` 这一层函数，
+**从不构造真实工具返回值**，也就从不经过宿主校验。这是探针的盲区，不是运气不好。
+
+**修复**：
+
+- `output.schema.images.items.properties` 补上 `rescueError: { type: "string" }`；
+- 宽高改为「先建 item，再 `if (Number.isFinite(...))` 写入」，不再写 undefined 键；
+- 新增 `lossless()` 兜底：返回值出栈前递归清洗 undefined / NaN / ±Infinity / -0
+  （数组内坏值补 null，带 ancestors Set 防自引用炸栈）；
+- 新增 `truncateSafe()`：截断标题时避免切断 UTF-16 代理对（emoji）。
+
+**新探针 `test/probe-tool-result.mjs`（离线 39 / 在线 45）**：真 `apply()` 注册工具 + 真 `execute()`，
+再把返回值喂给**复刻的宿主两道闸门**。负控用「从 schema 里删掉 rescueError 的 reduced schema」
+复现 1.8.1 形状——拿现 schema 做负控等于自欺（第一版就是这么写的，已改）。
+`IG_TOOL_ONLINE=1` 真搜「毛晓彤」→ 45/45，返回值通过两道闸门。
+
+**顺带钉死一条**：本地分支的 `images[].url` 是**根相对** `/images/?abs=…`，探针显式断言
+「不得出现绝对 URL」——桌面端 `port: 0` 每次重启换端口，绝对 URL 必然失效。
+
+**回归**：`node test/run-all.mjs --full` → **15 套件全绿 / 0 失败**。
+
 ## 1.8.1 — 2026-10-21
 
 ### 🐞 修：搜索图源「有结果」被当成「结果能用」，花瓣全坏时一张图都发不出来
