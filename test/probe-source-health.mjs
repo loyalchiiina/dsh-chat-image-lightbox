@@ -57,9 +57,56 @@ chk("搜狗 forbid 被识别为图源不可用", /\/forbid\/i\.test\(String\(dat
 // 曾经的实现只 rescue 被抽样判为 blocked 的图，其余一律原样交付远程 URL——
 // 于是 4/35 抽样之外的死链、307 跨域跳转全部漏进正文，用户看到图片无法预览。
 // 现在每张候选都必须先下载、验过 magic 字节，才允许出现在结果里。
-chk("搜图交付前逐张下载（不再只救被抽样判坏的）", /await mapLimit\(picked, 4, async function \(item, idx\)/.test(src));
+chk("候选池放大到 want*4（前几条 403 时还有货可换）", /Math\.max\(want \* 4, want\)/.test(src));
+chk("分批下载（SEARCH_BATCH，不是一次下整池）", /var SEARCH_BATCH = 8;/.test(src));
+chk("凑够 want 张就停止下载", /keptSearch\.length < want/.test(src));
+chk("403 换同源 referer 重试", /function selfRefererFor\(url\)/.test(src) && /got\.status === 403/.test(src));
+
+// ── 真行为：403 时第 2 次请求的 referer 必须换成同源 ────────────────────────
+// 静态断言只能证明「代码里写了这个分支」，证明不了「它真的换了头」。
+// 实测背景（2026-10-21，36 个真实候选）：花瓣 referer 32/36、同源 referer
+// 32/36、两个都试 33/36 —— i1.hdslb.com 只有同源能救（403 → 200，1.5MB），
+// 而 gd-hbimg.huaban.com 反过来（同源会坏成 567），所以必须是"换了才行"。
+{
+  const looksSrc = extractFn("function looksLikeImage(buf)");
+  const selfRefSrc = extractFn("function selfRefererFor(url)");
+  const hgbSrc = extractFn("async function httpGetBuffer(url, referer, timeoutMs)");
+  // 最小合法 PNG 头（magic + IHDR 起头），够 looksLikeImage 认，不用真能解码
+  const TINY = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489", "hex");
+  const seen = [];
+  const fakeGet = async (url, headers) => {
+    seen.push(headers.referer);
+    if (seen.length === 1) return { status: 403, headers: {}, body: Buffer.alloc(0), route: "test" };
+    return { status: 200, headers: { "content-type": "image/png" }, body: TINY, route: "test" };
+  };
+  const looksFn = new Function("return " + looksSrc)();
+  const fn = new Function("getBytes", "BROWSER_UA", "looksLikeImage", "selfRefererFor",
+    selfRefSrc + "\n" + hgbSrc + "\nreturn httpGetBuffer;")(
+    fakeGet, "UA", looksFn, (u) => { try { const x = new URL(u); return x.protocol + "//" + x.host + "/"; } catch (e) { return null; } });
+  let got = null, err = null;
+  try { got = await fn("https://i1.hdslb.com/a.jpg", "https://huaban.com/", 1000); }
+  catch (e) { err = e; }
+  chk("403 时自动换同源 referer（第 2 次请求的 referer 真的变了，不是只写了分支）",
+    seen.length === 2 && seen[0] === "https://huaban.com/" && seen[1] === "https://i1.hdslb.com/");
+  chk("换 referer 之后取到字节就算成功（不抛 403）" + (err ? " [err=" + err.message + "]" : ""),
+    got !== null && got.body.length === TINY.length);
+  // 对照组：不是 403 的错就不该换 referer —— 否则每次超时都白等一轮
+  const seen2 = [];
+  const fakeGet2 = async (url, headers) => {
+    seen2.push(headers.referer);
+    return { status: 404, headers: {}, body: Buffer.alloc(0), route: "test" };
+  };
+  let err2 = null;
+  try {
+    await new Function("getBytes", "BROWSER_UA", "looksLikeImage", "selfRefererFor",
+      selfRefSrc + "\n" + hgbSrc + "\nreturn httpGetBuffer;")(
+      fakeGet2, "UA", looksFn, (u) => "https://x/")(  "https://i1.hdslb.com/a.jpg", "https://huaban.com/", 1000);
+  } catch (e) { err2 = e; }
+  chk("404 不触发换 referer（只对 403/401/567 换）", seen2.length === 1 && err2 !== null);
+}
+chk("搜图交付前逐张下载（不再只救被抽样判坏的）", /await mapLimit\(chunk, 4, async function \(item, idx\)/.test(src));
 chk("下载失败记 rescueError 而不是空 catch", /item\.rescueError = e3/.test(src));
-chk("只有拿到本地副本的才留下", /if \(picked\[ss\]\.localised\) keptSearch\.push/.test(src));
+chk("只有拿到本地副本的才留下", /if \(chunk\[ss\]\.localised\) keptSearch\.push/.test(src));
 chk("下载失败的图如实说明张数与原因", /张下载失败（链接已失效或被站点拦截），已跳过不发/.test(src));
 chk("note 报出实际交付张数", /已交付 " \+ picked\.length \+ " 张/.test(src));
 chk("一张都下不下来时抛错而不是返回空结果", /张图片一张都下载不下来/.test(src));

@@ -92,13 +92,16 @@ for (const k of ["htmlBlockPage", "htmlBingBlock", "jsonError", "empty"]) {
 // ── 3. 行为：httpGetBuffer 真的会把「200 + image/jpeg + HTML」判死 ────────────
 // 抠 httpGetBuffer 需要 getBytes / BROWSER_UA，这里注入一个假 getBytes 直接喂
 // 三种响应，验的是「拿到字节之后那几行判断」而非网络。
+// 1.8.8 起 httpGetBuffer 会为 403 换同源 referer 重试，故 selfRefererFor 也要带上；
+// 不注入就是 ReferenceError，探针会把「测试脚手架缺件」误报成「代码坏了」。
 const httpGetBufferSrc = extractFn("async function httpGetBuffer(url, referer, timeoutMs)");
-const makeHttpGetBuffer = new Function("getBytes", "BROWSER_UA", "looksLikeImage",
-  httpGetBufferSrc + "\nreturn httpGetBuffer;");
+const selfRefSrc = extractFn("function selfRefererFor(url)");
+const makeHttpGetBuffer = new Function("getBytes", "BROWSER_UA", "looksLikeImage", "selfRefererFor",
+  selfRefSrc + "\n" + httpGetBufferSrc + "\nreturn httpGetBuffer;");
 
 async function feed(status, ctype, body) {
   const fakeGet = async () => ({ status, headers: { "content-type": ctype }, body, route: "test" });
-  const fn = makeHttpGetBuffer(fakeGet, "UA", looksLikeImage);
+  const fn = makeHttpGetBuffer(fakeGet, "UA", looksLikeImage, (u) => { try { const x = new URL(u); return x.protocol + "//" + x.host + "/"; } catch (e) { return null; } });
   try {
     const r = await fn("http://example/x.jpg", null, 1000);
     return { ok: true, type: r.type, len: r.body.length };

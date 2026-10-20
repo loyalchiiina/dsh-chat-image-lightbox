@@ -149,7 +149,7 @@ definition 块在宿主 `renderNode` 里 `return null`，`renderBlocks` 又 `.fi
 ```bash
 node test/probe-rowclear.mjs       # 18 项：clear 插入位置/幂等/多段
 node test/probe-poprole.mjs        # 15 项：role=dialog 只在打开时存在
-node test/probe-source-health.mjs  # 54 项：图源健康降级 / 逐张下载校验 / 缓存上限 / 搜狗 forbid / 坏图剔除 / 正文编号续号
+node test/probe-source-health.mjs  # 61 项：图源健康降级 / 候选池放大 / 分批下载 / 403 换 referer / 缓存上限 / 搜狗 forbid / 坏图剔除 / 正文编号续号
 node test/probe-tool-result.mjs    # 39 项：返回值过宿主两道闸门（IG_TOOL_ONLINE=1 → 45 项含真搜图）
 node test/probe-dep-resolve.mjs    # 24 项：依赖多根解析 / 代理绕过 / 真起服务验 TIFF·HEIC 转码
 node test/probe-serve-integrity.mjs  # 33 项：交付内容完整性——magic 字节校验 / 伪装图 415 / 含 % 文件名
@@ -171,8 +171,22 @@ node test/run-all.mjs --full       # 上面 8 个 + 实验室 11 套件 = 19 套
 > 一个回复调 3 次就是三组「图1」，用户直接问「这次为啥从序号3开始」——他的观察是对的。
 > 补 `start` 参数把全局编号交回调用方，投递铁律新增第 5 条「编号由插件决定，正文不许自己写数字」。
 > 用户数不出张数，和看不到图一样是交付失败。
+>
+> 🔴 **1.8.8 的教训（候选池是给失败留替补，不是"多抓几张"）**：搜「喜羊羊」要 3 张
+> 一张都不给，而同一时刻搜「刘亦菲」要 12 张给 12 张。差别不在图源质量——Bing 把
+> 百度百科、B 站这几个防盗链站排在了「喜羊羊」的前几条，前 3 条全是 403，而旧代码
+> 只取 `want` 张、下载一张不成就算整查询失败。**"取够了"和"取到了"是两件事**：
+> 旧逻辑把"图源给了 3 条结果"当成"这 3 条就是能交付的 3 张"，中间毫无补救余地。
+> 现在候选池 `want × 4` + 分批下载（8 张一批）凑够即停。
+>
+> 🔴 **1.8.8 的教训二（不存在"正确的那个 Referer"）**：防盗链的判据是"请求像不像
+> 从我自己站点发起的"，所以对 A 站正确的东西对 B 站必然错。实测 36 个真实候选：
+> 花瓣 Referer 32/36、主机自身 Referer 32/36、**两个都试 33/36**。`i1.hdslb.com`
+> 只有自身 Referer 能取到（403→200，1.5MB），`gd-hbimg.huaban.com` 正好相反（自身
+> Referer 被 EdgeOne 拦成 567）。唯一稳的做法是**失败后换一个再试**，而不是去找
+> 那个"正确的"。
 
-> `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 54/54。
+> `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 61/61。
 
 > 🟠 **1.8.3 的教训（同一条假设的第三个出口）**：健康采样把 `probeRemoteForBrowser` 的**三种**返回形态只数成两种 —— `{blocked:false, error:...}`（网络/TLS 根本没探到）竟被算作「可加载」。真搜一次 4 张里 2 张 `fetch failed`，note 仍写「4 张可加载」、`ratio` 仍 1.0，于是门禁不换源。**教训：健康判定的「正例」必须是被证实的正例（确认 2xx + image/*），不能是「没被证伪」。**
 
@@ -240,11 +254,11 @@ node test/run-all.mjs --full       # 上面 8 个 + 实验室 11 套件 = 19 套
 
 | 位置 | 版本 | 类型 | 风险 |
 |------|------|------|------|
-| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.7 | 真实目录 | **源码，唯一权威** |
-| `profiles\desktop\node_modules\...` | 1.8.7 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
-| `profiles\web\node_modules\...` | 1.8.7 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
-| `profiles\xiufu\node_modules\...` | 1.8.7 | **Junction** → local-plugins，声明 `link:` | 同上 |
-| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 / 1.8.2 / 1.8.3 / 1.8.4 / 1.8.5 / 1.8.6 / 1.8.7 都**尚未发布**（发布需用户当次授权） |
+| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.8 | 真实目录 | **源码，唯一权威** |
+| `profiles\desktop\node_modules\...` | 1.8.8 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
+| `profiles\web\node_modules\...` | 1.8.8 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
+| `profiles\xiufu\node_modules\...` | 1.8.8 | **Junction** → local-plugins，声明 `link:` | 同上 |
+| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 / 1.8.2 / 1.8.3 / 1.8.4 / 1.8.5 / 1.8.6 / 1.8.7 / 1.8.8 都**尚未发布**（发布需用户当次授权） |
 
 > ✅ **2026-10-21 起，三处副本不再是「三份拷贝」而是「同一个源」**：三个 profile 的 `dependencies` 都写成
 > `link:C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox`，`node_modules` 下是 Junction。
@@ -290,7 +304,7 @@ unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source
 - [ ] `node --check lib/client.js` 通过
 - [ ] `node test/probe-rowclear.mjs` 18/0
 - [ ] `node test/probe-poprole.mjs` 15/0
-- [ ] `node test/probe-source-health.mjs` 54/0（含逐张下载校验与正文编号续号）
+- [ ] `node test/probe-source-health.mjs` 61/0（含候选池放大 / 分批下载 / 403 换 referer / 正文编号续号）
 - [ ] `node test/probe-tool-result.mjs` 39/0（改过返回值/`output.schema` 时必须）
 - [ ] `node test/probe-dep-resolve.mjs` 24/0（改过依赖加载/网络层时必须——这是唯一能证明 `sharp` 真拿到了的探针）
 - [ ] `node test/probe-serve-integrity.mjs` 33/0（改过下载/转存/发送链路时必须——它证明的是「发出去的东西真是图片」）
