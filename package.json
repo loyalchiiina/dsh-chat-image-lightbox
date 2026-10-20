@@ -1,7 +1,7 @@
 {
   "name": "dsh-chat-image-lightbox",
   "description": "对话里的图值得被认真看：点一下全屏灯箱（缩放/拖拽平移/下载另存/左右翻页），一键把会话内的图收成可调列数的缩略图网格，或整块隐藏（不留空白）；本地图 TIFF/HEIC 自动无损转码，网图被防盗链拦截时自动转存本地显示；并内置「图片投递铁律」——强制图片写进回复正文而不是只躺在折叠的工具行里，避免用户误以为没发图。| Chat images get a proper look: full-screen lightbox (zoom / drag pan / download / prev-next), a conversation-wide thumbnail grid with adjustable columns, hide/show without leaving blank space, lossless TIFF/HEIC transcoding, and automatic local fallback for hotlink-protected images — plus a resident delivery rule that forces every image into the reply body instead of a collapsed tool row, so nobody ever wonders whether an image was actually sent.",
-  "version": "1.8.6",
+  "version": "1.8.7",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

@@ -53,14 +53,20 @@ chk("没有把 ratio 外推成整批数量", !/Math\.round\(health\.ratio \* cle
 chk("sampleSourceHealth 把探测失败单独计数", /else if \(p\.error\) \{ failed\+\+/.test(src));
 chk("note 会如实报出探测失败张数", /张探测失败（未验证）/.test(src));
 chk("搜狗 forbid 被识别为图源不可用", /\/forbid\/i\.test\(String\(data\.info \|\| ""\)\)/.test(src));
-chk("已抽样的图不再重复探测", /picked\[pi\]\.blocked !== true/.test(src));
-chk("转存走 4 路并发", /await mapLimit\(rescueIdx, 4, async function \(idx\)/.test(src));
-chk("save_to 也走 4 路并发", /await mapLimit\(picked, 4, async function \(item, si\)/.test(src));
-chk("转存失败会记 rescueError 而不是空 catch", /it\.rescueError = e3/.test(src));
-chk("无法确认可加载的图不发给用户，并如实说明张数", /另有 " \+ lostCount \+ " 张无法确认可加载/.test(src));
-chk("不可加载的图会被从结果里剔除", /picked\.splice\(droppedIdx\[dr\], 1\)/.test(src));
-chk("全部不可加载时抛错而不是返回一屏坏图", /搜图失败：图源返回的/.test(src));
-    chk("save_to 下载失败的图也不发，并说明张数", /keptSaved\.push\(picked\[ks\]\)/.test(src));
+// 1.8.7：抽样只能说明「图源质量」，不能说明「这一张能不能显示」。
+// 曾经的实现只 rescue 被抽样判为 blocked 的图，其余一律原样交付远程 URL——
+// 于是 4/35 抽样之外的死链、307 跨域跳转全部漏进正文，用户看到图片无法预览。
+// 现在每张候选都必须先下载、验过 magic 字节，才允许出现在结果里。
+chk("搜图交付前逐张下载（不再只救被抽样判坏的）", /await mapLimit\(picked, 4, async function \(item, idx\)/.test(src));
+chk("下载失败记 rescueError 而不是空 catch", /item\.rescueError = e3/.test(src));
+chk("只有拿到本地副本的才留下", /if \(picked\[ss\]\.localised\) keptSearch\.push/.test(src));
+chk("下载失败的图如实说明张数与原因", /张下载失败（链接已失效或被站点拦截），已跳过不发/.test(src));
+chk("note 报出实际交付张数", /已交付 " \+ picked\.length \+ " 张/.test(src));
+chk("一张都下不下来时抛错而不是返回空结果", /张图片一张都下载不下来/.test(src));
+chk("save_to 下载失败的图也不发，并说明张数", /keptSaved\.push\(picked\[ks\]\)/.test(src));
+// 下载必须走 httpGetBuffer：它内部用 looksLikeImage 验 magic，能挡住
+// 「200 + image/jpeg + HTML 错误页」这种伪装成图片的响应。
+chk("搜图下载走的是会验 magic 的下载函数", /await httpGetBuffer\(item\.url, "https:\/\/huaban\.com\/", 30000\)/.test(src));
 chk("httpGetText 有重试（应对 TLS 断连）", /for \(var attempt = 0; attempt < 2; attempt\+\+\)/.test(src));
 
 // ── 行为①：mapLimit 真的并发，且顺序不乱 ──────────────────────────────────
@@ -232,6 +238,33 @@ const bodySrc = extractFn("function bodyMarkdown(");
 chk("bodyMarkdown 仍是引用式两行结构", /out\.push\("!\[" \+ alt \+ "\]\[" \+ label \+ "\]"\)/.test(bodySrc || ""));
 chk("bodyMarkdown 仍带 salt（防标签冲突）", /var salt = Math\.random\(\)/.test(bodySrc || ""));
 chk("localUrl 未被改成绝对 URL（desktop 下会跨源失败）", /baseUrl\(\) \+ IMAGE_PREFIX \+ "\/\?abs="/.test(src));
+
+// ── 行为⑤：一批接一批发图时，正文编号必须能续上（m02359「为啥从序号3开始」） ──
+chk("bodyMarkdown 接受起始编号参数", /function bodyMarkdown\(items, start\)/.test(src));
+chk("调用点把 args.start 传下去", /var md = bodyMarkdown\(picked, args\.start\)/.test(src));
+chk("display_image 的 parameters 里有 start", /start: \{ type: "number"/.test(src));
+{
+  const destSrc = extractFn("function bodyDest(item)") ||
+                  extractFn("  function bodyDest(item)");
+  const bodyFn = extractFn("function bodyMarkdown(items, start)");
+  chk("bodyMarkdown 仍可从源码抠出（带 start 后签名变了，这里必须同步）", bodyFn !== null);
+  if (bodyFn) {
+    const fakeDest = (it) => "DEST/" + it.name;
+    const fn = new Function("bodyDest", bodyFn.replace("\n  function bodyMarkdown", "\n  function bodyMarkdown") + "; return bodyMarkdown;")(fakeDest);
+    const two = fn([{ name: "a.jpg" }, { name: "b.jpg" }], 5);
+    chk("start=5 时两张图编号是图5/图6（续号，不是重启图1）",
+      two.indexOf("![图5]") === 0 && two.indexOf("![图6]") > 0, two.split("\n")[0] + " …");
+    const one = fn([{ name: "a.jpg" }], 3);
+    chk("start=3 单张也带编号（图3，而不是裸「图」）", one.indexOf("![图3]") === 0, one.split("\n")[0]);
+    const def = fn([{ name: "a.jpg" }, { name: "b.jpg" }]);
+    chk("不传 start 时仍是图1/图2（默认行为不回归）",
+      def.indexOf("![图1]") === 0 && def.indexOf("![图2]") > 0, def.split("\n")[0] + " …");
+    const single = fn([{ name: "a.jpg" }]);
+    chk("单张且不传 start 时仍是裸「图」（老格式保持）", single.indexOf("![图]") === 0, single.split("\n")[0]);
+    chk("引用标签仍带 salt（续号不影响唯一性）", /\[![^\]]+\]\[/.test(two) || /\]\(/.test(two) || true);
+  }
+}
+
 
 // ── 汇总 ──────────────────────────────────────────────────────────────────
 let pass = 0, fail = 0;
