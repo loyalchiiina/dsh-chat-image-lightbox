@@ -54,7 +54,7 @@ chk("sampleSourceHealth 把探测失败单独计数", /else if \(p\.error\) \{ f
 chk("note 会如实报出探测失败张数", /张探测失败（未验证）/.test(src));
 chk("搜狗 forbid 被识别为图源不可用", /\/forbid\/i\.test\(String\(data\.info \|\| ""\)\)/.test(src));
 chk("已抽样的图不再重复探测", /picked\[pi\]\.blocked !== true/.test(src));
-chk("转存走 4 路并发", /await mapLimit\(blockedIdx, 4, async function \(idx\)/.test(src));
+chk("转存走 4 路并发", /await mapLimit\(rescueIdx, 4, async function \(idx\)/.test(src));
 chk("save_to 也走 4 路并发", /await mapLimit\(picked, 4, async function \(item, si\)/.test(src));
 chk("转存失败会记 rescueError 而不是空 catch", /it\.rescueError = e3/.test(src));
 chk("无法确认可加载的图不发给用户，并如实说明张数", /另有 " \+ lostCount \+ " 张无法确认可加载/.test(src));
