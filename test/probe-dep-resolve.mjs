@@ -77,6 +77,33 @@ let applyErr = null;
 try { mod.apply(fakeCtx, { injectImageLaw: false }); } catch (e) { applyErr = e; }
 chk("apply() 在 Junction 布局下不抛错: " + (applyErr ? applyErr.message : "ok"), !applyErr);
 
+// ── 关键：问插件自己「sharp 到底拿到了没有」，而不是复刻一遍解析逻辑 ────────
+//
+// 这一条是被一个真实事故逼出来的。修复 `__depCache` 少写一行 `var` 时，
+// `resolveDep` 每次都抛 ReferenceError，而 `loadDep` 里那个 `try{}catch{return null}`
+// 把它吞成了 null —— 于是 sharp 静默不可用，而本探针当时仍 23/23 全绿，
+// 因为下面那些断言测的是「复刻出来的解析算法」和「一个恰好能跑通的 PNG 分支」，
+// 唯独没有问插件自己报了什么。**同一个错误（测行为不测真实状态）在这里又犯了一次。**
+//
+// 所以这一条只做一件事：读插件启动时自己打印的那行状态，必须是 available。
+const statusLines = [];
+const prevInfo = fakeCtx.logger.info;
+fakeCtx.logger.info = (m) => { statusLines.push(String(m)); };
+{
+  const mod2 = await import(pathToFileURL(SRC).href + "?status=" + Date.now());
+  const ctx2 = {
+    logger: { info(m) { statusLines.push(String(m)); }, warn() {}, error() {}, debug() {} },
+    effect(fn) { const d = fn(); return () => { if (typeof d === "function") d(); }; },
+    webServer: { port: 0, register() { return () => {}; } },
+    systemPrompt: { section() { return () => {}; } },
+    tools: { register() { return () => {}; } },
+  };
+  mod2.apply(ctx2, { injectImageLaw: false });
+}
+fakeCtx.logger.info = prevInfo;
+const servingLine = statusLines.find((l) => l.includes("serving from")) || "";
+chk("插件自报 sharp 状态（这行必须是 available，不能只看行为）: " + (servingLine || "无此行"), /\(sharp: available\)/.test(servingLine));
+
 // ── 端到端：真起服务，请求一次，只认字节 ───────────────────────────────────
 const server = http.createServer((req, res) => {
   for (const r of routes) {

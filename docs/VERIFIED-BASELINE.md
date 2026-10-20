@@ -151,7 +151,7 @@ node test/probe-rowclear.mjs       # 18 项：clear 插入位置/幂等/多段
 node test/probe-poprole.mjs        # 15 项：role=dialog 只在打开时存在
 node test/probe-source-health.mjs  # 45 项：图源健康降级 / 转存并发 / 缓存上限 / 搜狗 forbid / 探测失败不算可加载 / 坏图剔除
 node test/probe-tool-result.mjs    # 39 项：返回值过宿主两道闸门（IG_TOOL_ONLINE=1 → 45 项含真搜图）
-node test/probe-dep-resolve.mjs    # 23 项：依赖多根解析 / 代理绕过 / 真起服务验 TIFF·HEIC 转码
+node test/probe-dep-resolve.mjs    # 24 项：依赖多根解析 / 代理绕过 / 真起服务验 TIFF·HEIC 转码
 node test/run-all.mjs --full       # 上面 5 个 + 实验室 11 套件 = 16 套件，一条命令全跑
 ```
 
@@ -256,7 +256,7 @@ unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source
 - [ ] `node test/probe-poprole.mjs` 15/0
 - [ ] `node test/probe-source-health.mjs` 45/0
 - [ ] `node test/probe-tool-result.mjs` 39/0（改过返回值/`output.schema` 时必须）
-- [ ] `node test/probe-dep-resolve.mjs` 23/0（改过依赖加载/网络层时必须——这是唯一能证明 `sharp` 真拿到了的探针）
+- [ ] `node test/probe-dep-resolve.mjs` 24/0（改过依赖加载/网络层时必须——这是唯一能证明 `sharp` 真拿到了的探针）
 - [ ] `node test/run-all.mjs --full` 16 套件全绿（一条命令代替逐条手跑）
 - [ ] `E:\tmp\lightbox-lab` 11 套件全绿
 - [ ] 网格布局视觉验证：发 ≥10 张图，确认「并列 / 等高 / 末行补齐 / 文字回左端」

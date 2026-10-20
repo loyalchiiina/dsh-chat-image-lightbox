@@ -85,12 +85,27 @@ query「蔡秀彬」 5817ms  采用 Bing  返回 5 张  health {ok:4, sampled:4,
 
 ### 探针
 
-新增 `test/probe-dep-resolve.mjs`（**23 项**）：16 条静态结构断言 + 真 `apply()`
-+ **真起 HTTP 服务**请求 TIFF/PNG 验转码。它和旧探针的区别在于——
+新增 `test/probe-dep-resolve.mjs`（**24 项**）：16 条静态结构断言 + 真 `apply()`
++ **真起 HTTP 服务**请求 TIFF/PNG 验转码 + **读插件自报的 sharp 状态**。它和旧探针的区别在于——
 旧探针只测「函数行为对不对」，这个探针测「依赖到底加载到了没有」。
 1.8.1~1.8.3 三个版本里 `sharp` 一直是死的，而 15 个套件全绿，就是因为没人测这件事。
 
 `test/run-all.mjs` 的 LOCAL 从 4 套件变 **5 套件**，`--full` 共 **16 套件全绿 / 0 失败**。
+
+### 补记：探针自己也有同一个盲区（改完当场发现的）
+
+第一版探针 23 项全绿，但它**不能**发现 sharp 坏掉。原因是我把 `depBases` / `resolveDep`
+复制进探针里自己跑，测的是「复制出来的算法对不对」，而不是「插件自己拿到了没有」。
+
+这不是假设 —— 修 `__depCache` 少写一行 `var` 的那个瞬间就是这样：`resolveDep` 每次抛
+`ReferenceError`，`loadDep` 里的 `catch (e) { return null }` 把它吞成 null，sharp 静默不可用，
+而探针当时仍 23/23 全绿。**同一个错误（测行为、不测真实状态）在修它的过程里又犯了一次。**
+
+所以加了第 24 项：导入插件、`apply()`、读它自己打印的那行
+`image-gallery: serving from … (sharp: available)`，只认 `available`。
+鉴别力实测：把 `__depCache` 声明删掉做出坏副本，指向它跑 → **21/24**，失败的正是新加的这条，
+外加两条 TIFF 转码断言（拿到 `image/tiff` 而不是 `image/png`、magic 是 `49492a00`）。
+
 
 ## 1.8.3 — 2026-10-21
 
