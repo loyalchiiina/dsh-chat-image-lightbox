@@ -346,6 +346,9 @@ merge-base  = e359fa8  →  远端独有 0
 | 备份 | `~\.dsh\backups\dsh-chat-image-lightbox-1.8.0-<ts>\`（zip + git bundle + 散装 + SHA256） |
 | 宿主机理实验室 | `E:\tmp\lightbox-lab\`（`why_before_worked.cjs`、`mix_live.cjs`、`mask_verify.cjs`、`leak_decisive.cjs`） |
 | 效果图（新） | `docs/images/lightbox.png`、`lightbox-swipe.png`、`columns-3col.png`、`columns-4col.png`、`columns-5col.png`、`hide-images.png` |
+| **技能库副本（本文）** | `E:DSHskillsimage-displayeferences图片插件开发经验-1.8.9.md`（整文件复制，2026-10-21 同步；仓内为唯一基准） |
+| **技能库开发日志** | `E:DSHskillsdsh-configeferencesplugin-developmenteferenceslightbox-plugin-dev-log.md` §三十五（1.1.x–1.7.3 的三十四节 + 本次 1.8.9 接续） |
+| 一致性核验脚本 | `E:	mplightbox-labaudit-doc-vs-code.mjs`（文档代码坐标/行为断言 ↔ 源码逐条比对） |
 
 ---
 
