@@ -1,3 +1,97 @@
+## 1.8.4 — 2026-10-21
+
+### 🔴 修：TIFF / HEIC 一律「图片无法预览」——插件装成 Junction 后依赖加载不到
+
+**症状**：`display_image(path="...fixture.tiff")` 返回的正文里只有一行「图片无法预览」。
+
+**根因**：这张 TIFF 不是特例，**所有 TIFF/HEIC 都显示不出来**。启动日志早就写了答案：
+
+```
+image-gallery: serving from C:\Users\Administrator\.dsh\uploads (sharp: unavailable)
+```
+
+`sharp` 是把 TIFF/HEIC 转成浏览器能画的格式的唯一手段。它不可用，这两种格式就只能以
+`application/octet-stream` 原样吐给浏览器 —— 于是显示失败。
+
+**为什么不可用**：1.8.1 起插件在三个 profile 里都装成**目录 Junction**
+（`profiles/<name>/node_modules/dsh-chat-image-lightbox` → `.dsh/local-plugins/dsh-chat-image-lightbox`）。
+Node 解析 `require` 用的是模块的**真实路径**、不是链接路径，所以
+`createRequire(import.meta.url)("sharp")` 从 `local-plugins/` 一路往上找，
+而 `sharp` / `undici` 都在 `profiles/<name>/node_modules` —— 正好被链接从解析链上抹掉了。
+
+实测（`require.resolve` 逐项验）：
+
+| 依赖 | 修复前 | 真实位置 |
+|---|---|---|
+| `sharp` | ❌ MISSING | `profiles/<name>/node_modules/sharp` 0.35.5（libvips 8.18.7 可用） |
+| `undici` | ❌ MISSING | `profiles/<name>/node_modules/undici` 7.30.0 |
+| `@deepseek-ai/dsh-tools` | ✅ OK | 走 harness 自己的链 |
+
+**修复**：新增 `resolveDep()` / `loadDep()` 多根解析 —— 依次从
+`fileURLToPath(import.meta.url)`、`process.execPath`、`EXEPATH`、`process.cwd()`
+出发，每个根向上走 8 层，首个命中即缓存。`sharp`、`undici`、`defineTool` 三处全部改走它。
+
+> 教训：**Junction / symlink 会让 `createRequire(import.meta.url)` 找错目录。**
+> 依赖解析不能假设「模块目录附近一定能找到 node_modules」。
+
+### 🔴 修：直连实际上没直连——本机 `NODE_USE_ENV_PROXY=1` 把 `fetch` 全接走了
+
+**症状**：搜索时 duitang 的图被报成「探测失败（未验证）」并剔除，
+note 写「另有 1 张无法确认可加载……已跳过不发」——**可那张图明明能打开**。
+
+**根因**：本机 `NODE_USE_ENV_PROXY=1` 且 `HTTPS_PROXY=http://127.0.0.1:7890`，
+Node 全局 `fetch` 会**自己**套上这个代理，**不传 `dispatcher` 并不等于「不走代理」**。
+同一 URL、同 headers 实测：
+
+| 走法 | 结果 |
+|---|---|
+| `fetch(url, {headers})` | TLS reset（000） |
+| `curl --noproxy '*' url` | **200 image/jpeg** ✓ |
+| `curl -x http://127.0.0.1:7890 url` | 000（TLS reset） |
+| `node:https.request({agent: new https.Agent()})` | **200** ✓ |
+
+即 duitang **只认直连、走代理必失败**。旧代码想用 `undici.Agent()` 做「直连」，
+可 `undici` 根本解析不到（见上一条），`directAgent` 恒为 `null` —— 那个「直连」分支
+一直是空操作，两次尝试其实都走了同一个代理。于是健康门禁把好图判成坏图。
+
+**修复**：新增 `rawDirectGet()`（`node:https` / `node:http` + **显式 Agent**，
+完全无视 env 代理，自带 5 跳重定向与超时）和 `getBytes()`（先 runtime fetch，
+transport 失败再直连）。`httpGetText` / `httpGetBuffer` / `probeRemoteForBrowser`
+全部改走 `getBytes`。**HTTP 状态码视为答案，不换路重试。**
+
+> 教训：**「不传 dispatcher」≠「不走代理」。** 要真直连，必须显式 `new Agent()`
+> （undici）或直接用 `node:https` —— 后者更可靠，因为它连 undici 是否存在都不依赖。
+
+### 实测验收（都是真跑，不是推断）
+
+转码链路（真起 HTTP 服务请求插件自己的路由，只认 content-type 与 magic bytes）：
+
+```
+TIFF        → 200 image/png   1725575B  magic 89504e47  ✓
+TIFF ?raw=1 → magic 49492a00（下载保住原格式）        ✓
+HEIC        → 200 image/webp  magic 52494646          ✓
+JPEG        → 原样 image/jpeg magic ffd8ff            ✓
+```
+
+搜索（真实网络）：
+
+```
+query「毛晓彤」 8898ms  采用 Bing  返回 5 张  health {ok:3, sampled:4, failed:0}
+query「蔡秀彬」 5817ms  采用 Bing  返回 5 张  health {ok:4, sampled:4, failed:0}
+```
+
+（`failed: 0` 说明探测不再因为代理误判而失败；`ok < sampled` 是站点真的拒绝，
+会如实体现在 note 里。）
+
+### 探针
+
+新增 `test/probe-dep-resolve.mjs`（**23 项**）：16 条静态结构断言 + 真 `apply()`
++ **真起 HTTP 服务**请求 TIFF/PNG 验转码。它和旧探针的区别在于——
+旧探针只测「函数行为对不对」，这个探针测「依赖到底加载到了没有」。
+1.8.1~1.8.3 三个版本里 `sharp` 一直是死的，而 15 个套件全绿，就是因为没人测这件事。
+
+`test/run-all.mjs` 的 LOCAL 从 4 套件变 **5 套件**，`--full` 共 **16 套件全绿 / 0 失败**。
+
 ## 1.8.3 — 2026-10-21
 
 ### 🟠 修：健康门禁把「探测失败」当成「可加载」，抽样 4/4 全绿却仍有坏图
