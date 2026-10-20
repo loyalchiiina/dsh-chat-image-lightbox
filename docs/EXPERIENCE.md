@@ -247,12 +247,12 @@ pathImages: void 0                                              // 流式期不�
 ## 8. 与 GitHub 上游的差异（2026-10-21 实测）
 
 ```
-本地 HEAD  = cc9c6e4  (1.8.8，本次升到 1.8.9)
 origin/main = e359fa8  (package.json version = 1.7.9)
-merge-base  = e359fa8  →  本地领先 18 个提交，远端无本地缺失的提交
+merge-base  = e359fa8  →  远端独有 0
+本地领先    = 14 个提交（1.8.8 cc9c6e4）→ 17 个提交（1.8.9 HEAD，含本文档与截图）
 ```
 
-**结论：GitHub 上的最新版（1.7.9）落后本地 18 个提交，且它在 desktop 端正文根本不出图。**
+**结论：GitHub 上的最新版（1.7.9）落后本地 17 个提交，且它在 desktop 端正文根本不出图。**
 
 1.7.9 的正文拼装是根相对路径 `![文件名](/images/?abs=C%3A%5C…)`，而 `baseUrl()` 返回 `""`。在 desktop（origin `dsh-app://app`）settled 态会这样坏掉：
 
