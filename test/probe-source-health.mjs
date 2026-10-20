@@ -50,14 +50,17 @@ chk("健康度报告的是抽样实测值（不是整批推算）",
   /health: \{ ok: health\.ok, sampled: health\.sampled, failed: health\.failed \}/.test(src));
 chk("没有把 ratio 外推成整批数量", !/Math\.round\(health\.ratio \* clean\.length\)/.test(src));
 // 1.8.3：探测失败（网络/TLS）必须与「可加载」「被拦」分开计数
-chk("sampleSourceHealth 把探测失败单独计数", /else if \(p\.error\) \{ failed\+\+; \}/.test(src));
+chk("sampleSourceHealth 把探测失败单独计数", /else if \(p\.error\) \{ failed\+\+/.test(src));
 chk("note 会如实报出探测失败张数", /张探测失败（未验证）/.test(src));
 chk("搜狗 forbid 被识别为图源不可用", /\/forbid\/i\.test\(String\(data\.info \|\| ""\)\)/.test(src));
 chk("已抽样的图不再重复探测", /picked\[pi\]\.blocked !== true/.test(src));
 chk("转存走 4 路并发", /await mapLimit\(blockedIdx, 4, async function \(idx\)/.test(src));
 chk("save_to 也走 4 路并发", /await mapLimit\(picked, 4, async function \(item, si\)/.test(src));
 chk("转存失败会记 rescueError 而不是空 catch", /it\.rescueError = e3/.test(src));
-chk("拿不到本地副本时会明确告知用户", /有 " \+ lost \+ " 张被原站点拦截且无法转存/.test(src));
+chk("无法确认可加载的图不发给用户，并如实说明张数", /另有 " \+ lostCount \+ " 张无法确认可加载/.test(src));
+chk("不可加载的图会被从结果里剔除", /picked\.splice\(droppedIdx\[dr\], 1\)/.test(src));
+chk("全部不可加载时抛错而不是返回一屏坏图", /搜图失败：图源返回的/.test(src));
+    chk("save_to 下载失败的图也不发，并说明张数", /keptSaved\.push\(picked\[ks\]\)/.test(src));
 chk("httpGetText 有重试（应对 TLS 断连）", /for \(var attempt = 0; attempt < 2; attempt\+\+\)/.test(src));
 
 // ── 行为①：mapLimit 真的并发，且顺序不乱 ──────────────────────────────────

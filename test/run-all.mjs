@@ -25,7 +25,7 @@ const FULL = process.argv.includes("--full");
 const LOCAL = [
   { file: path.join(SELF, "probe-rowclear.mjs"), expect: 18, label: "rowclear 布局收口" },
   { file: path.join(SELF, "probe-poprole.mjs"), expect: 15, label: "role=dialog 生命周期" },
-  { file: path.join(SELF, "probe-source-health.mjs"), expect: 42, label: "图源健康降级/并发/缓存" },
+  { file: path.join(SELF, "probe-source-health.mjs"), expect: 45, label: "图源健康降级/并发/缓存" },
   { file: path.join(SELF, "probe-tool-result.mjs"), expect: 39, label: "工具返回值过两道闸门" },
 ];
 
