@@ -243,19 +243,24 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 ### Usage
 
 1. Place images in `~/.dsh/uploads/` (or any directory served by your DSH instance)
-2. In your AI response, use markdown image syntax with a **root-relative** path:
+2. Call the `display_image` tool and **paste the markdown it returns straight into your reply body** (this step is not optional — tool rows are collapsed):
    ```
-   ![Description](/images/?abs=<url-encoded absolute path>)
+   ![图1][2ab1]
+
+   [2ab1]: C:/Users/me/pic.jpg
    ```
+   That is the real 1.8.x shape: **reference-style + absolute local path**, which the Host rewrites into `api/file?path=…`.
 3. The image will display inline with lightbox enhancement
 
-> ⚠️ **Never use `http://127.0.0.1:<port>/images/...`.** DSH Desktop renders the GUI
-> inside the custom protocol `dsh-app://app`, so the loopback `http://` origin is a
-> *different* origin: Chromium blocks it in the renderer before the request ever
-> reaches the web server (`fetch` throws `TypeError: Failed to fetch`, `<img>` fires
-> `onerror`). Root-relative paths inherit the page origin (`dsh-app://app`) and are
-> forwarded correctly — measured `200 / image/webp / 120×213`. The host half has
-> emitted root-relative URLs since v1.7.7; v1.7.8 in this repo only documents it.
+> ⚠️ **Do not hand-build `/images/?abs=…`.** That is the legacy 1.7.x shape. On Desktop (page origin `dsh-app://app`)
+> `parseFileLink` returns `undefined` for any destination containing `?`, and `localPathMediaUrl` strips `?abs=` via
+> `split(/[?#]/)`, leaving `dsh-app://app/api/file?path=%2Fimages%2F` — a *directory* — which answers
+> `FS_NOT_REGULAR_FILE` + 403 and renders as "failed · filename". The body builder shipped in 1.7.9 on GitHub uses
+> exactly that shape, **which is why it renders nothing on Desktop — do not treat it as a reference implementation**.
+>
+> ⚠️ **Never use `http://127.0.0.1:<port>/images/...` either.** DSH Desktop renders the GUI inside the custom protocol
+> `dsh-app://app`, so the loopback `http://` origin is a *different* origin: Chromium blocks it in the renderer before the
+> request ever reaches the web server (`fetch` throws `TypeError: Failed to fetch`, `<img>` fires `onerror`).
 
 **Note**: For the download button to trigger a save-as dialog, the image must be served from the same origin as your DSH instance (e.g., via the `/images/` route). Cross-origin images will open in a new tab instead.
 
@@ -265,11 +270,13 @@ When an image shows as blank, a blob of text, or the lightbox opens empty, check
 
 #### ① Images must use an http(s) URL or a root-relative path — base64/data-URI and attachments are NOT rendered
 
-DSH renders images into `<img>` only from http(s) URLs **or site-root-relative paths**. It does **not** render `data:image/png;base64,...` inline, nor "file-delivery/attachment" messages (those appear as tool-call text, not an image).
+DSH renders images into `<img>` from an http(s) URL **or an absolute local path written in markdown**. It does **not** render `data:image/png;base64,...` inline, nor "file-delivery/attachment" messages (those appear as tool-call text, not an image).
 
-- ✅ Correct — markdown + **root-relative** path (what the `display_image` tool emits):
+- ✅ Correct — verbatim `display_image` output (reference-style + absolute local path; the Host rewrites it into `api/file?path=…`):
   ```
-  ![Description](/images/?abs=C%3A%5CUsers%5Cme%5Cpic.jpg)
+  ![图1][2ab1]
+
+  [2ab1]: C:/Users/me/pic.jpg
   ```
 - ✅ Correct — any non-hotlink-protected external image:
   ```
@@ -451,13 +458,23 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 ### 使用方法
 
 1. 把图片放到 `~/.dsh/uploads/` 目录（或 DSH 实例提供的任意目录）
-2. AI 回复中使用 markdown 图片语法，路径用**站内根相对**：
+2. 直接调 `display_image` 工具，**把它返回的 markdown 原样贴进回复正文**（这一步不能省，工具行是折叠的）：
    ```
-   ![描述](/images/?abs=<URL 编码后的绝对路径>)
+   ![图1][2ab1]
+
+   [2ab1]: C:/Users/me/pic.jpg
    ```
+   这是 1.8.x 的真实形态：**引用式 + 本机绝对路径**，由宿主改写成 `api/file?path=…` 直出。
 3. 图片会内联显示并自动带 lightbox 增强
 
-> ⚠️ **绝对不要用 `http://127.0.0.1:<端口>/images/...`。** DSH 桌面端把界面跑在自定义协议 `dsh-app://app` 下，`http://` 回环地址对页面而言是**另一个源**，Chromium 在渲染进程里直接拦掉，请求根本到不了 webServer（`fetch` 抛 `TypeError: Failed to fetch`，`<img>` 触发 `onerror`）。站内根相对路径继承页面源（`dsh-app://app`）才会被正确转发——实测 `200 / image/webp / 120×213`。宿主侧自 v1.7.7 起就一直输出根相对 URL，v1.7.8 只是把这条写进文档。
+> ⚠️ **不要自己拼 `/images/?abs=…`**。那是 1.7.x 的旧形态，在桌面端（页面源 `dsh-app://app`）会被
+> `parseFileLink`（遇到 `?` 直接返回 `undefined`）与 `localPathMediaUrl`（`split(/[?#]/)` 剥掉 `?abs=`）联手打碎成
+> `dsh-app://app/api/file?path=%2Fimages%2F` —— 一个目录，`/api/file` 回 `FS_NOT_REGULAR_FILE` + 403，界面显示「失败 · 文件名」。
+> GitHub 上 1.7.9 的正文拼装就是这个写法，**所以它在桌面端根本不出图，不要当参考实现**。
+>
+> ⚠️ **也不要用 `http://127.0.0.1:<端口>/images/...`。** 桌面端页面源是 `dsh-app://app`，`http://` 回环对页面而言是
+> **另一个源**，Chromium 在渲染进程里直接拦掉，请求根本到不了 webServer（`fetch` 抛 `TypeError: Failed to fetch`，
+> `<img>` 触发 `onerror`，服务端命中 0）。
 
 **注意**：下载按钮要弹出"另存为"对话框，图片必须从 DSH 同源路由提供（如 `/images/` 路由）。跨域图片会在新标签页打开。
 
@@ -467,11 +484,13 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 
 #### ① 图片必须用 http(s) 外链或站内根相对路径，不能依赖 base64 或附件
 
-DSH 对话只对**http(s) 图片 URL** 或**站内根相对路径**渲染成 `<img>`，**不支持 `data:image/png;base64,...` 内嵌**，也不支持以"附件/文件交付"方式直接显示（那只会显示成工具调用文字）。
+DSH 对话只对 **http(s) 图片 URL** 或 **markdown 里的本机绝对路径**渲染成 `<img>`，**不支持 `data:image/png;base64,...` 内嵌**，也不支持以"附件/文件交付"方式直接显示（那只会显示成工具调用文字）。
 
-- ✅ 正确：markdown 图片语法 + **站内根相对**路径（`display_image` 工具输出的就是这个）
+- ✅ 正确：**原样粘贴 `display_image` 的输出**（引用式 + 本机绝对路径，宿主会改写成 `api/file?path=…`）
   ```
-  ![描述](/images/?abs=C%3A%5CUsers%5C我%5C图片.jpg)
+  ![图1][2ab1]
+
+  [2ab1]: C:/Users/me/pic.jpg
   ```
 - ✅ 正确：任意**无防盗链**的外链图片
   ```
