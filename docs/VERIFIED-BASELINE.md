@@ -154,7 +154,8 @@ node test/probe-tool-result.mjs    # 39 项：返回值过宿主两道闸门（I
 node test/probe-dep-resolve.mjs    # 24 项：依赖多根解析 / 代理绕过 / 真起服务验 TIFF·HEIC 转码
 node test/probe-serve-integrity.mjs  # 33 项：交付内容完整性——magic 字节校验 / 伪装图 415 / 含 % 文件名
 node test/probe-viewable-body.mjs  # 32 项：正文指向浏览器真能渲染的副本（TIFF→PNG / HEIC→WebP / 伪装图被拒）
-node test/run-all.mjs --full       # 上面 7 个 + 实验室 11 套件 = 18 套件，一条命令全跑
+node test/probe-heic-real.mjs      # 24 项：真 HEVC HEIC 必须真能转码（素材真实性 + WIC 兜底接线 + 真跑出 PNG magic）
+node test/run-all.mjs --full       # 上面 8 个 + 实验室 11 套件 = 19 套件，一条命令全跑
 ```
 
 > `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 45/45。
@@ -167,6 +168,16 @@ node test/run-all.mjs --full       # 上面 7 个 + 实验室 11 套件 = 18 套
 > ② 旧探针只测「函数行为对不对」，从不验证「依赖能否加载」、也不真起 HTTP 服务请求一次。
 > **教训：凡是被静默降级（`try{}catch{}` 变 `null`）的依赖，必须有一个探针证明它拿到了；**
 > **「功能能用」的证据只能来自端到端（真起服务、只认 content-type 与 magic bytes），不能来自日志里没有报错。**
+
+> 🔴 **1.8.6 的教训（素材本身要有断言，否则测的是幻觉）**：三个版本都写着「HEIC 已验证」，
+> 而本机唯一那个 `.heic` 文件首字节是 `FF D8 FF E0 … JFIF`——普通 JPEG，后缀骗人。
+> 插件按后缀走 HEIC 分支，sharp 解了个 JPEG，探针就绿了；**真 HEIC 解码路径一次都没走过**。
+> 底层原因：sharp 0.35.5 自带的 libheif **没有编入 HEVC 解码器**，`metadata()` 能读出
+> `format=heif compression=hevc`，一请求像素就抛
+> `Support for this compression format has not been built in: HEVC`。
+> 「能读元数据」≠「能解码」——判定解码能力必须让它吐出目标格式的字节并验 magic。
+> 现在 `probe-heic-real.mjs` 第一条断言就是「素材不能是错标 JPEG」，并内置真 HEVC 素材
+> （brand `mif1`，box ftyp/meta/mdat 覆盖全文件）；鉴别力实测：删掉 WIC 兜底 → 24/24 变 11/4。
 
 > 🔴 **1.8.5 的教训（症状在正文，就得从正文那条链路取证）**：1.8.4 修好 sharp 之后，**工具行**的 TIFF 能显示了，
 > 正文里的仍是「图片无法预览」。我拿工具行的修复去解释正文的症状，没有先证明两者是同一条链路。
@@ -215,11 +226,11 @@ node test/run-all.mjs --full       # 上面 7 个 + 实验室 11 套件 = 18 套
 
 | 位置 | 版本 | 类型 | 风险 |
 |------|------|------|------|
-| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.5 | 真实目录 | **源码，唯一权威** |
-| `profiles\desktop\node_modules\...` | 1.8.5 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
-| `profiles\web\node_modules\...` | 1.8.5 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
-| `profiles\xiufu\node_modules\...` | 1.8.5 | **Junction** → local-plugins，声明 `link:` | 同上 |
-| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 / 1.8.2 / 1.8.3 / 1.8.4 / 1.8.5 都**尚未发布**（发布需用户当次授权） |
+| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.6 | 真实目录 | **源码，唯一权威** |
+| `profiles\desktop\node_modules\...` | 1.8.6 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
+| `profiles\web\node_modules\...` | 1.8.6 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
+| `profiles\xiufu\node_modules\...` | 1.8.6 | **Junction** → local-plugins，声明 `link:` | 同上 |
+| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 / 1.8.2 / 1.8.3 / 1.8.4 / 1.8.5 / 1.8.6 都**尚未发布**（发布需用户当次授权） |
 
 > ✅ **2026-10-21 起，三处副本不再是「三份拷贝」而是「同一个源」**：三个 profile 的 `dependencies` 都写成
 > `link:C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox`，`node_modules` 下是 Junction。
@@ -270,7 +281,8 @@ unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source
 - [ ] `node test/probe-dep-resolve.mjs` 24/0（改过依赖加载/网络层时必须——这是唯一能证明 `sharp` 真拿到了的探针）
 - [ ] `node test/probe-serve-integrity.mjs` 33/0（改过下载/转存/发送链路时必须——它证明的是「发出去的东西真是图片」）
 - [ ] `node test/probe-viewable-body.mjs` 32/0（改过交付/转码/正文路径时必须——它证明的是「正文那张图浏览器真的能画出来」）
-- [ ] `node test/run-all.mjs --full` 18 套件全绿（一条命令代替逐条手跑）
+- [ ] `node test/probe-heic-real.mjs` 24/0（改过转码/解码路径时必须——它证明真 HEVC HEIC 真能吐 PNG，含素材真实性断言）
+- [ ] `node test/run-all.mjs --full` 19 套件全绿（一条命令代替逐条手跑）
 - [ ] `E:\tmp\lightbox-lab` 11 套件全绿
 - [ ] 网格布局视觉验证：发 ≥10 张图，确认「并列 / 等高 / 末行补齐 / 文字回左端」
 - [ ] 正文无路径泄漏（引用式定义行不上屏）

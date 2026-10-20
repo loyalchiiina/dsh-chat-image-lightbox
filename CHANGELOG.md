@@ -1,3 +1,89 @@
+## 1.8.6 — HEIC 从来就没成功过：sharp 没有 HEVC 解码器
+
+### 症状
+
+一个**真正的** HEIC 文件放进对话，正文显示「图片无法预览」。而此前三个版本（1.8.3 / 1.8.4 / 1.8.5）的 CHANGELOG 和探针都写着「HEIC 已验证通过」。
+
+### 为什么之前的"验证"是假的
+
+本机唯一那个 `.heic` 文件——`updates/maoxiaotong/6239785344_1080x1619_毛晓彤__@weibo.com.heic`——**根本不是 HEIC**：
+
+```
+$ head -c 12 该文件 | od -An -tx1
+ ff d8 ff e0 00 10 4a 46 49 46 00 01
+      ↑↑↑ JPEG SOI + APP0 "JFIF"
+```
+
+后缀写的是 `.heic`，字节是普通 JPEG。插件按后缀走 HEIC 分支，sharp 高高兴兴解了个 JPEG，探针断言"转码成功"→ 全绿。**真正的 HEIC 解码路径一次都没被走过。**
+
+全盘扫描确认：`.dsh` 与 `E:\tmp` 下带 `.heic/.heif` 后缀的文件只有 2 个（互为副本），内容是同一个 JPEG；按 magic 扫（ftyp brand = heic/heix/hevc/mif1）**0 命中**。
+
+### 真正的根因
+
+sharp 0.35.5 / libvips 8.18.7 自带的 libheif 是**没有编入 HEVC 解码器**的构建。它读容器完全正常，一请求像素就报错：
+
+```
+$ node -e 'sharp("real.heic").metadata()'
+OK   format=heif 1440x960 compression=hevc      ← 容器读得动
+
+$ node -e 'sharp("real.heic").webp().toBuffer()'
+FAIL heif: Error while loading plugin: Support for this compression format
+     has not been built in: HEVC (a suitable decoder plugin is libde265)
+```
+
+**元数据读通 ≠ 能解码。** 这正是当初误判的机制：`metadata()` 成功被当成了能力证明。`sharp.format.heif` 显示 `input.file=true` 也是骗人的——那是容器层的能力，不是编解码器的。
+
+### 修法：接 Windows WIC 兜底解码
+
+Windows 自带 HEIF/HEVC 解码能力（本机已装 `Microsoft.HEIFImageExtension 1.2.48.0` + `Microsoft.HEVCVideoExtension 2.5.33.0`），WIC 解这个真 HEIC 毫无问题：
+
+```
+WIC: 1440x960 → PNG 520x347, 403695 B, 532 ms
+```
+
+- `wicAvailable()` — 仅 Windows 为真，非 Windows 直接跳过兜底。
+- `wicToPng(src, dst, width, timeoutMs)` — 一次性 PowerShell + WIC 转 PNG。脚本用 `-EncodedCommand`（UTF-16LE base64）传递，**路径和引号永远不会经过命令行解析**，避免中文路径/空格/引号地狱。支持按宽度等比缩放、60s 超时、进程可 kill。
+- `ensureViewable()` 的 `catch` 分支：sharp 抛错后若 WIC 可用则走兜底，产出仍超 16MB 就按 0.7 递减宽度重试（下限 1024），失败才如实报错「sharp 报 X；系统 WIC 兜底也失败：Y」。
+- 工具行 handler（`imageFileHandler`）的转码 `catch (e2)` 同样接 WIC，写临时 PNG 后读回、删临时文件。
+
+### 新增探针：probe-heic-real.mjs（24 项）
+
+它存在的唯一理由就是**防止再拿错标文件冒充 HEIC**，所以分三层：
+
+1. **素材真实性**（6 项）：fixture 必须 `offset4 == "ftyp"`、brand ∈ {heic,heix,hevc,hevx,mif1,msf1}、**首字节不能是 FFD8FF**（错标 JPEG 立刻被抓）、box 结构（ftyp/meta/mdat）必须完整覆盖整个文件（防截断下载）、必须含 ftyp 与 mdat。
+2. **源码接线**（6 项）：`wicAvailable` / `wicToPng` / `-EncodedCommand` / 两处 catch 都接了 WIC。
+3. **真跑转码**（12 项）：真导入插件、真 `apply()`、真 `execute()`，要求产出 `.png` 副本、magic 必须是 `89504e470d0a1a0a`、>10KB、≤16MB、原 `.heic` 未被改写、正文 markdown 指向副本而不是 `.heic`、且**不抛错**。
+
+固定素材：`test/fixtures/real-hevc.heic`（293608 B，brand `mif1`，box = ftyp 24 + meta 510 + mdat 293074，正好覆盖全文件）。
+
+### 鉴别力验证（这一步不能省）
+
+造一个把 WIC 兜底整段删掉的坏副本：
+
+| 代码 | probe-heic-real 结果 |
+|---|---|
+| 真代码 | **24/24 全绿** |
+| 删掉 WIC 兜底（-1290 字节） | **11 通过 / 4 失败** ❌ |
+
+失败项正是：`ensureViewable 的 catch 里调用了 WIC 兜底`、`工具行 handler 的 catch 里也接了 WIC`、`真 HEIC 能转码而不抛错`（报 `bad seek` + `HEVC ... not been built in`）、`真 HEIC 没有被拒绝`。探针不是恒真。
+
+第一版探针在坏代码上是**抛异常崩掉**而不是报红，已改成捕获异常并作为失败项上报——一个会崩的探针迟早被人忽略。
+
+### 回归
+
+`node test/run-all.mjs --full` → **19 套件全绿 / 0 失败**（本地 8 + 实验室 11）。
+
+### 教训
+
+1. **"能读元数据"不是"能解码"。** 判定一个解码能力，必须让它真的吐出目标格式的字节，并且验 magic。任何只看 `metadata()` / `format.xxx.input=true` 的断言都可能在骗你。
+2. **样本的扩展名不是样本的身份。** 那个 `.heic` 骗了三个版本。凡是用真实文件做测试素材的探针，都必须先验素材本身的 magic，把"素材真实性"作为第一条断言。测试素材本身要有断言，否则测试的是幻觉。
+3. **没有鉴别力验证的探针等于没有探针。** 只有把代码改坏、看它变红，才知道它到底在测什么。
+
+### 已知边界
+
+- WIC 兜底仅 Windows。Linux/macOS 上真正的 HEVC-HEIC 仍会失败（sharp 同一构建缺解码器），报错会如实说明。
+- AVIF（`ftyp avif`，AV1 编码）sharp 原生支持，不需要 WIC；实测压缩参数 `hevc` 不被本机 libheif 支持，`av1` 可以。
+
 ## 1.8.5 — 2026-10-21
 
 ### 🔴 修：正文里的 TIFF / HEIC 永远显示不出来 —— 正文那条路根本不经过插件的转码
