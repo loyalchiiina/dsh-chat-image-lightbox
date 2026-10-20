@@ -107,6 +107,80 @@ query「蔡秀彬」 5817ms  采用 Bing  返回 5 张  health {ok:4, sampled:4,
 外加两条 TIFF 转码断言（拿到 `image/tiff` 而不是 `image/png`、magic 是 `49492a00`）。
 
 
+### 🔴 修：一整屏「图片无法预览」的另一条独立原因——HTML 错误页被当成 .jpg 保存并发出
+
+这条是**验收时真发图**才发现的，脚本永远看不见：
+
+```
+C:\Users\Administrator\.dsh\image-gallery-auto\image-4-go3m.jpg   14455B
+前 16 字节:  0a 0a 0a 0a 0a 0a 0a 3c 21 64 6f 63 74 79 70 65
+             → "\n\n\n\n\n\n\n<!doctype"
+```
+
+它被标成 `image/jpeg` 发给浏览器。浏览器解码失败 → **「图片无法预览」**。
+而整条链路上没有一层报错，因为每一层都只看状态码和 `content-type`：
+
+| 环节 | 当时检查了什么 | 漏了什么 |
+|---|---|---|
+| `httpGetBuffer` | `status` 是 2xx | 字节是不是图片 |
+| `probeRemoteForBrowser` | `status` 2xx + `content-type` 以 `image/` 开头 | 同上 |
+| `imageFileHandler` | 后缀 → `mimeFor()` | 文件内容与后缀是否一致 |
+
+图源（CDN 拦截页）返回 **HTTP 200 + `content-type: image/jpeg` + HTML 正文** 时，
+三层全部放行。于是「转存成功」的文件是个网页，用户看到一屏坏图。
+
+**修复**：新增 `looksLikeImage(buf)`，按 **magic 字节**判定（JPEG `FFD8FF`、PNG `89504E47`、
+GIF `GIF8`、WEBP `RIFF….WEBP`、TIFF `II*\0` / `MM\0*`、BMP `BM`、ISOBMFF `ftyp`），三处都接上：
+
+- `httpGetBuffer`：非图片字节直接抛「不是图片（content-type=…，开头=…）」，且**不重试**
+  （重试拿到的是同一张 HTML）；
+- `probeRemoteForBrowser`：`blocked` 判定加上 `!looksLikeImage`，返回里带 `realBytes`；
+- `imageFileHandler`：后缀是图片但字节不是 → **415** 并明说原因（svg/ico 豁免，它们是文本/容器格式）。
+
+> 教训：**`200` 和 `content-type` 都不构成「这是图片」的证据，只有字节构成。**
+> 一个只会「下载并写盘」的转存函数，等于把远端的错误页原样存进了自己的缓存目录。
+
+### 🟠 修：文件名带 `%` 时取不到图，甚至把请求打死（`?abs=` 被解码两次）
+
+`searchParams.get("abs")` **已经**做过一次 percent 解码，代码里又 `decodeURIComponent` 了一次。
+两个方向实测都坏：
+
+| 文件名 | 二次解码后 | 结果 |
+|---|---|---|
+| `a%20b.jpg` | `a b.jpg` | **404**（文件明明在） |
+| `折扣50%的图.jpg` | `折扣50%的图` 里的 `%的` 不是合法转义 | **URIError，未捕获，请求直接崩** |
+
+**修复**：优先用 `searchParams` 给出的值；只有它在磁盘上不存在时，才尝试再解一次
+（兼容仍传双编码路径的调用方）；二次解码抛错时答 **400**，绝不让异常穿出 handler。
+
+> 教训：`searchParams` 的值是**已解码**的。对它再 `decodeURIComponent` 不是「保险」，
+> 是把所有合法含有 `%` 的文件名变成 bug。
+
+### 验收方式：真发图，不只看脚本数字
+
+这一版的三条问题里有两条是**只有真发图才能看见**的（TIFF 显示失败、缓存里躺着 HTML）。
+所以验收改成把每种图**真发进对话正文**，并另配一个端到端脚本 `E:\tmp\lightbox-lab\verify-all-forms.mjs`，
+用插件自己的 handler 逐格式核对浏览器实际会收到的 `content-type` 与 magic bytes：
+
+| 形态 | 结果 |
+|---|---|
+| TIFF（`fixture.tiff`） | 200 `image/png`，magic `89504e47` |
+| HEIC（1080×1619） | 200 `image/webp`，magic `52494646` |
+| JPEG / PNG / WEBP 原图 | 原样返回，magic 正确 |
+| 目录多图（并列网格） | 6 张全部 200 |
+| 文件名含空格 / `%20` / 中文 + `%` | 全部 200（修复前 404 或崩） |
+| 远程直链 URL | 原样直传 |
+| 关键词搜图 | Bing 4 张；被拒的 1 张转存后正常显示 |
+
+### 新增探针 `test/probe-serve-integrity.mjs`（33 项）
+
+10 条静态结构断言 + `looksLikeImage` 对 8 种真格式 / 4 种非图片字节的行为断言
++ 用假 `getBytes` 喂「200 + `image/jpeg` + HTML」等 5 种响应验 `httpGetBuffer` 的判断
++ **真起 HTTP 服务**验含 `%` 的文件名与伪装文件（其中 PNG 素材是手写的最小合法 PNG，不依赖 sharp）。
+
+鉴别力实测：把 `looksLikeImage` 改成恒 `true` 造坏副本 → **失败 8 项**（25/33），
+失败的正是「HTML 被拒」「415」「说明原因」几条。`run-all --full` 现在 **17 套件全绿**。
+
 ## 1.8.3 — 2026-10-21
 
 ### 🟠 修：健康门禁把「探测失败」当成「可加载」，抽样 4/4 全绿却仍有坏图

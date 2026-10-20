@@ -152,7 +152,8 @@ node test/probe-poprole.mjs        # 15 项：role=dialog 只在打开时存在
 node test/probe-source-health.mjs  # 45 项：图源健康降级 / 转存并发 / 缓存上限 / 搜狗 forbid / 探测失败不算可加载 / 坏图剔除
 node test/probe-tool-result.mjs    # 39 项：返回值过宿主两道闸门（IG_TOOL_ONLINE=1 → 45 项含真搜图）
 node test/probe-dep-resolve.mjs    # 24 项：依赖多根解析 / 代理绕过 / 真起服务验 TIFF·HEIC 转码
-node test/run-all.mjs --full       # 上面 5 个 + 实验室 11 套件 = 16 套件，一条命令全跑
+node test/probe-serve-integrity.mjs  # 33 项：交付内容完整性——magic 字节校验 / 伪装图 415 / 含 % 文件名
+node test/run-all.mjs --full       # 上面 6 个 + 实验室 11 套件 = 17 套件，一条命令全跑
 ```
 
 > `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 45/45。
@@ -257,7 +258,8 @@ unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source
 - [ ] `node test/probe-source-health.mjs` 45/0
 - [ ] `node test/probe-tool-result.mjs` 39/0（改过返回值/`output.schema` 时必须）
 - [ ] `node test/probe-dep-resolve.mjs` 24/0（改过依赖加载/网络层时必须——这是唯一能证明 `sharp` 真拿到了的探针）
-- [ ] `node test/run-all.mjs --full` 16 套件全绿（一条命令代替逐条手跑）
+- [ ] `node test/probe-serve-integrity.mjs` 33/0（改过下载/转存/发送链路时必须——它证明的是「发出去的东西真是图片」）
+- [ ] `node test/run-all.mjs --full` 17 套件全绿（一条命令代替逐条手跑）
 - [ ] `E:\tmp\lightbox-lab` 11 套件全绿
 - [ ] 网格布局视觉验证：发 ≥10 张图，确认「并列 / 等高 / 末行补齐 / 文字回左端」
 - [ ] 正文无路径泄漏（引用式定义行不上屏）

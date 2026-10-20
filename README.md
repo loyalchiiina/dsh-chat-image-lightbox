@@ -172,6 +172,16 @@ Pictures from your agent sit tiny inside a bubble — to see detail you have to 
 - **The auto-rescue cache no longer grows forever (1.8.1)**: `~/.dsh/image-gallery-auto` was write-only (measured: 129 files / 187 MB). It is now checked before every rescue and pruned oldest-first past 500 files or 512 MB (a file that cannot be deleted does not abort the sweep)
 - **Survives a Junction install (1.8.4)**: the plugin is a directory **Junction** into `local-plugins` in all three profiles. Node resolves `require` from the module's **real path**, so `createRequire(import.meta.url)("sharp")` walked up from `local-plugins/` while `sharp`/`undici` live in `profiles/<name>/node_modules` — the link cut them out of the chain. Consequence: the startup line said `sharp: unavailable` and **every TIFF/HEIC rendered as "图片无法预览"**, and `undici` was unreachable too. `resolveDep()` now searches several roots (module path / `process.execPath` / `EXEPATH` / `cwd`, eight levels up each) and all three dependencies go through it
 - **Direct really means direct (1.8.4)**: with `NODE_USE_ENV_PROXY=1`, Node's global `fetch` applies `HTTPS_PROXY` **by itself** — omitting `dispatcher` does not mean "no proxy". Hosts that only answer direct requests (duitang) were therefore reported as "probe failed" and good images were dropped as broken. Direct fetches now use `node:https` with an **explicit Agent** (ignoring env proxies entirely, 5 redirect hops max); `getBytes()` tries runtime fetch first and falls back to direct on transport failure, treating an HTTP status as the answer rather than grounds for a second route
+- **Trust the bytes, not the `200` or the content-type (1.8.4)** — one "successfully rescued"
+  cache file was actually a CDN error page (HTTP 200, `content-type: image/jpeg`, body starting
+  `<!doctype html>`). It was served as `image/jpeg`, the browser failed to decode it, and the
+  result was "图片无法预览". Download, probe and serve now all verify the magic bytes
+  (JPEG/PNG/GIF/WEBP/TIFF/BMP/ISOBMFF) and refuse anything that is not an image — a file that
+  lies about itself gets a 415 with the reason instead of a silent broken picture.
+- **Filenames containing `%` now resolve (1.8.4)** — `?abs=` was percent-decoded twice, so
+  `a%20b.jpg` became `a b.jpg` (404) and `折扣50%的图.jpg` threw an uncaught `URIError` that
+  killed the request. The already-decoded value is used as-is now, with a single fallback decode
+  only when that path is not on disk, and a 400 for malformed escapes.
 - **"Probe failed" no longer counts as "loadable" (1.8.3)**: health sampling used to split results only into "blocked" and "not blocked", so a **network/TLS failure — where nothing was measured at all — was counted as loadable**. One real search had 2 of 4 probes fail with `fetch failed` while the note still claimed "4 loadable" and `ratio` stayed at 1.0, so the gate never switched sources and the user still got broken images. Results are now counted three ways (loadable / blocked / probe-failed) and `ratio` is decided **only by confirmed 2xx images**; the note and the skip reason state each count separately ("N blocked by the origin" vs "N probe-failed, unverified")
 - **Image-delivery law (1.7.8)**: the plugin keeps a resident system-prompt rule (`image-gallery:delivery-law`, order 1500) requiring every delivered image to appear **in the reply body** as `![](…)` markdown rather than only inside the `display_image` tool row. **Tool rows are collapsed by default**, so a user scrolling the transcript sees nothing and reasonably concludes no image was sent. The rule also forbids "see above" / "sent N images" phrasing and forbids passing off a file path or a bare link as a delivered image. Opt out with `config.injectImageLaw: false`.
 
@@ -364,6 +374,14 @@ MIT
 - **失败必须说出来（1.8.1）**：转存失败原先被空 `catch (e) {}` 吞掉，用户只看到坏图、日志一片安静。现在失败原因记在 `rescueError` 上，并在 note 里写明「有 N 张被原站点拦截且无法转存」，让「发不出图」这件事至少是**可见**的
 - **依赖装成 Junction 也不会失联（1.8.4）**：插件在三个 profile 里都是**目录 Junction** 指向 `local-plugins`。Node 解析 `require` 用的是模块**真实路径**，所以 `createRequire(import.meta.url)("sharp")` 会从 `local-plugins/` 往上找，而 `sharp`/`undici` 都在 `profiles/<name>/node_modules` —— 直接被链接抹掉。后果是启动日志写 `sharp: unavailable`，**所有 TIFF/HEIC 一律「图片无法预览」**，而且 `undici` 也拿不到。现在用 `resolveDep()` 多根解析（模块路径 / `process.execPath` / `EXEPATH` / `cwd`，各自向上 8 层），三处依赖全部改走它
 - **直连必须真直连（1.8.4）**：本机 `NODE_USE_ENV_PROXY=1` 时，Node 全局 `fetch` 会**自己**套用 `HTTPS_PROXY` —— 不传 `dispatcher` 并不等于不走代理。于是 duitang 这类只认直连的站点被抓成「探测失败」，好图被当坏图剔掉。现在直连用 `node:https` + **显式 Agent**（完全无视 env 代理，自带 5 跳重定向），`getBytes()` 先试 runtime fetch、transport 失败再直连；HTTP 状态码视为答案、不换路重试
+- **不信任 `200` 和 `content-type`，只信任字节（1.8.4）** —— 一个「转存成功」的缓存文件
+  实际是 CDN 的错误页（HTTP 200、content-type 写着 `image/jpeg`、正文是 `<!doctype html>`），
+  handler 照旧标成 `image/jpeg` 发出去，浏览器解不开就是「图片无法预览」。现在下载、探测、
+  发送三层都校验 magic 字节（JPEG/PNG/GIF/WEBP/TIFF/BMP/ISOBMFF），不是图片就明确报错，
+  伪装文件返回 415 并说明原因。
+- **文件名带 `%` 也能取到图（1.8.4）** —— `?abs=` 曾被解码两次，`a%20b.jpg` 变成 `a b.jpg` 得 404，
+  `折扣50%的图.jpg` 更是抛 `URIError` 把请求打死。现在优先用已解码的值，只有磁盘上不存在时才
+  再解一次，转义非法时答 400。
 - **自动转存目录不再无限增长（1.8.1）**：`~/.dsh/image-gallery-auto` 原先只写不删（实测已 129 个文件 / 187 MB）。现在每次转存前检查一次：文件数 > 500 或总量 > 512 MB 就从**最旧的**开始清理（单个文件删不掉也不中断整轮）
 - **图片投递铁律（1.7.8）**：插件会在 system prompt 里常驻一条规则（`image-gallery:delivery-law`，order 1500），要求模型**把每张交付的图写进回复正文**（`![](…)` markdown），而不是只放在 `display_image` 的工具调用行里。因为**工具行默认折叠**，用户滚动正文时看不到折叠区内容，会合理认为「根本没发图」。铁律同时禁止「见上文」「已发送 N 张」这类不落图的写法，也禁止把文件路径或普通链接当成图片交付。想关掉：在 profile 的 cordis patch 里给本插件加 `config.injectImageLaw: false`
 
