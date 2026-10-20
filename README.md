@@ -1,14 +1,19 @@
 # DSH Chat Image Lightbox 🖼
 
-> ### 🛡 v1.7.8 — 强制图片出现在正文里 / Images must land in the reply body
+> ### 🛡 v1.8.9 — 工具行折叠 ≠ 已发送：铁律升级为「必须复述 + 计数自检」 / Collapsed tool row ≠ delivered
 >
-> **工具行是折叠的，用户看不到。** 从 1.7.8 起插件会在 system prompt 里常驻一条铁律，
-> 要求模型把每张交付的图**写进回复正文**（`![](…)`），不许只依赖 `display_image` 的工具调用行。
-> 这解决的是「图其实渲染好了、但用户以为没发」的经典误判。
+> **实测事故（2026-10-21）**：插件 20 张图（10 种格式）全部交付成功，但模型把图全留在 `display_image` 的工具结果里，
+> 正文只写了一张格式对照表 → 用户回「一张没看见啊」。原因是 1.7.8~1.8.8 的铁律只写了「不得只依赖工具行」，
+> 可以被「正文写了字但没写图」绕过。
 >
-> **Tool rows are collapsed — the user never sees them.** Since 1.7.8 the plugin keeps a resident
-> system-prompt rule requiring every delivered image to appear in the reply body, not only inside the
-> `display_image` tool row. Opt out with `config.injectImageLaw: false`.
+> 1.8.9 起铁律升级为 6 条硬约束 + 1 条收尾自检：**必须把工具返回的 `![](…)` 原样复述进正文**、
+> **表格/结论/清单都不算图**、**发前数一遍正文里 `![` 的数量必须等于声称的张数**。
+> Opt out with `config.injectImageLaw: false`.
+>
+> **Real incident (2026-10-21):** all 20 images were delivered fine, but the model left every one of them inside the
+> collapsed tool result and only wrote a format table in the body — the user replied "not a single one visible".
+> Since 1.8.9 the rule demands verbatim echoing of the returned markdown into the reply body, forbids passing a
+> table off as an image, and requires a pre-send count of `![` occurrences.
 
 > ### 🛠 v1.7.5 — 发图片失败已修复 / Image-sending bug fixed
 >
@@ -38,7 +43,7 @@
 dsh plugin --profile desktop add dsh-chat-image-lightbox
 ```
 
-> **当前版本 / Current version**：`1.7.8`
+> **当前版本 / Current version**：`1.8.9`
 > **适用内核 / Requires**：本包声明 `engines.dsh: ">=0.1.7-rc.1"` 与 `peerDependencies["@deepseek-ai/dsh"]: ">=0.1.7-rc.1"`（不硬绑具体内核版本）；本版实测验证于 **DSH NEXT 2.0.18-next**，客户端组件 `@deepseek-ai/dsh-client-ui-tool` 实测 `0.2.1-alpha.2`。
 > This package declares `engines.dsh: ">=0.1.7-rc.1"` and `peerDependencies["@deepseek-ai/dsh"]: ">=0.1.7-rc.1"` (no hard pin to a specific kernel); this release was verified end to end on **DSH NEXT 2.0.18-next**, with `@deepseek-ai/dsh-client-ui-tool` measured at `0.2.1-alpha.2`.
 
@@ -52,17 +57,34 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 
 ![灯箱全屏查看](docs/images/lightbox.png)
 
-> 原图完整显示（自动适配屏幕高度），右上角是「⬇ 下载」与「✕ 关闭」；同一条消息里的其他图片可连续翻页浏览。
-> The full-resolution image auto-fits the viewport, with ⬇ download and ✕ close in the top-right; other images in the same message can be paged through.
+> 点开正文里任意一张图即全屏灯箱：原图按屏幕高度自适应，右下角标注当前是第几张（如「图4」）。
+> 右侧竖排工具栏自下而上依次是：**✕ 关闭**、**⬇ 下载**、**‹ › 上一张 / 下一张**、**复制**、**在文件夹中显示**、
+> **缩略图网格**、**隐藏图片**、**− + 1×（缩小 / 放大 / 复位比例）**、**↑ ← ↺ → ↓（上移 / 左旋 / 复位 / 右旋 / 下移）**，
+> 底部显示当前缩放百分比。
+
+### 切换图片 · Paging between images in the same message
+
+![切换图片](docs/images/lightbox-swipe.png)
+
+> 同一条消息里的多张图可以连续翻页（截图里是 30 张的第 21 张）。红色箭头指的是右侧的 **‹ ›** 两颗按钮，
+> 也可以用键盘方向键翻页；翻页后计数（如「21 / 30」）与缩放比例同步刷新。
 
 ### 缩略图分列 · Thumbnail grid with adjustable columns
 
-![缩略图分列效果](docs/images/columns-3col.png)
+**3 列 · 3 columns**
 
-![多列分列效果](docs/images/columns-multi.png)
+![3 列缩略图](docs/images/columns-3col.png)
 
-> 一键把整个会话的图片收成网格；面板里的「缩略图显示列数」可设 1–12 列，输入的值会保存为默认值。
-> One click collapses every image in the conversation into a grid; the **缩略图显示列数** field sets 1–12 columns and the value is saved as your default.
+**4 列 · 4 columns**
+
+![4 列缩略图](docs/images/columns-4col.png)
+
+**5 列 · 5 columns**
+
+![5 列缩略图](docs/images/columns-5col.png)
+
+> 一键把整个会话的图片收成网格；面板里的「缩略图显示列数」可设 1–12 列，输入即生效并保存为默认值。
+> 每格高度统一、`object-fit: contain` 居中，所以竖图横图混排也不会参差不齐；网格之后的正文从最左侧开始，不会被挤到中间。
 
 ### 隐藏 / 展开 · Hide / restore
 
@@ -202,7 +224,7 @@ Pictures from your agent sit tiny inside a bubble — to see detail you have to 
   killed the request. The already-decoded value is used as-is now, with a single fallback decode
   only when that path is not on disk, and a 400 for malformed escapes.
 - **"Probe failed" no longer counts as "loadable" (1.8.3)**: health sampling used to split results only into "blocked" and "not blocked", so a **network/TLS failure — where nothing was measured at all — was counted as loadable**. One real search had 2 of 4 probes fail with `fetch failed` while the note still claimed "4 loadable" and `ratio` stayed at 1.0, so the gate never switched sources and the user still got broken images. Results are now counted three ways (loadable / blocked / probe-failed) and `ratio` is decided **only by confirmed 2xx images**; the note and the skip reason state each count separately ("N blocked by the origin" vs "N probe-failed, unverified")
-- **Image-delivery law (1.7.8)**: the plugin keeps a resident system-prompt rule (`image-gallery:delivery-law`, order 1500) requiring every delivered image to appear **in the reply body** as `![](…)` markdown rather than only inside the `display_image` tool row. **Tool rows are collapsed by default**, so a user scrolling the transcript sees nothing and reasonably concludes no image was sent. The rule also forbids "see above" / "sent N images" phrasing and forbids passing off a file path or a bare link as a delivered image. Opt out with `config.injectImageLaw: false`.
+- **Image-delivery law (1.8.9)**: the plugin keeps a resident system-prompt rule (`image-gallery:delivery-law`, order 1500, ~826 chars) requiring every delivered image to appear **verbatim in the reply body** as `![](…)` markdown rather than only inside the `display_image` tool row. **Tool rows are collapsed by default**, so a user scrolling the transcript sees nothing and reasonably concludes no image was sent. Six hard clauses plus a pre-send self-check: (1) echo the returned markdown into the body, (2) a table / summary / file listing is **not** an image, (3) one paragraph per image, no "see above" or "sent N images", (4) a path or a bare link is not an image, (5) reference-style pairs `![图1][1]` + `[1]: C:/…` must be pasted together, (6) numbering is plugin-owned — use `start=<last+1>` for later batches; and finally (7) count the `![` occurrences in your own reply, it must equal the number of images you claim. Opt out with `config.injectImageLaw: false`.
 
 ### Installation
 
@@ -410,7 +432,7 @@ MIT
   `折扣50%的图.jpg` 更是抛 `URIError` 把请求打死。现在优先用已解码的值，只有磁盘上不存在时才
   再解一次，转义非法时答 400。
 - **自动转存目录不再无限增长（1.8.1）**：`~/.dsh/image-gallery-auto` 原先只写不删（实测已 129 个文件 / 187 MB）。现在每次转存前检查一次：文件数 > 500 或总量 > 512 MB 就从**最旧的**开始清理（单个文件删不掉也不中断整轮）
-- **图片投递铁律（1.7.8）**：插件会在 system prompt 里常驻一条规则（`image-gallery:delivery-law`，order 1500），要求模型**把每张交付的图写进回复正文**（`![](…)` markdown），而不是只放在 `display_image` 的工具调用行里。因为**工具行默认折叠**，用户滚动正文时看不到折叠区内容，会合理认为「根本没发图」。铁律同时禁止「见上文」「已发送 N 张」这类不落图的写法，也禁止把文件路径或普通链接当成图片交付。想关掉：在 profile 的 cordis patch 里给本插件加 `config.injectImageLaw: false`
+- **图片投递铁律（1.8.9）**：插件会在 system prompt 里常驻一条规则（`image-gallery:delivery-law`，order 1500，约 826 字符），要求模型**把 `display_image` 返回的 markdown 原样复述进回复正文**（`![](…)`），而不是只放在工具调用行里。因为**工具行默认折叠**，用户滚动正文时看不到折叠区内容，会合理认为「根本没发图」。六条硬约束 + 一条收尾自检：①必须复述；②**表格/结论/清单都不算图**；③每张图各自成段，禁止「见上文」「已发送 N 张」；④路径与普通链接不是图；⑤引用式 `![图1][1]` 与 `[1]: C:/…` 必须成对出现；⑥编号由插件决定，多批传 `start=<上一批末尾+1>`；⑦**发前自检：数一遍正文里 `![` 的出现次数，必须等于声称的张数**。想关掉：在 profile 的 cordis patch 里给本插件加 `config.injectImageLaw: false`。
 
 ### 安装
 
