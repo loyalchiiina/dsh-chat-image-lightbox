@@ -264,8 +264,8 @@ DSH 的会话树归 React 所有。把图片 reparent 进自己创建的容器 �
 | **短行补位** | 缺格处插入**隐形 float 占位元素**（`markGridHosts` 创建，`clearGridHosts` 撤销） | `markGridHosts` :1829、`clearGridHosts` :1923 |
 | **隐藏/展开** | `.dsh-ig-hidden-block` 上 `display:none !important`，并且用 `:has(> img)` / `:has(> * > img)` **把外层包裹一起收掉**——这才是"不留空白带"的关键 | CSS :434-444、`setBlockMode` :1393、`blockMode` :1383 |
 | **分组** | `isChatImage`（排除头像/图标）→ `messageContainer` → `groupFor`；同一段连续 DOM 用 `areAdjacent` + `runGroups` 切组 | :1206 / :1264 / :1317 / :1577 / :1589 |
-| **图片身份键** | `srcKey()` 先 `stripResizeParam()` 剥掉 `?w=` 再比对，避免同图不同尺寸被当成两张 | `srcKey` :1374、`stripResizeParam` :911 |
-| **缩略图取图** | 只对**本插件自己路由**的图（`src` 含 `/images/`）追加 `?w=600`；已有 `w=` 不重复加 | `isLocalImagePath` :1567、`thumbnailSrcFor` :1570 |
+| **图片身份键** | `srcKey()` = `img.currentSrc || img.src`，**原样作键、不剥 `?w=`**；`?w=` 只在"取原图"时剥掉，用于灯箱 src、下载与 `dataset.dshOrigSrc` | `srcKey` :1374、`stripResizeParam` :911（调用点 :920 / :1101 / :1753） |
+| **缩略图取图** | ⚠️ **当前未接线**：`thumbnailSrcFor`（:1570，意图是给本地路由图追加 `?w=600`）**全仓零调用**，`isLocalImagePath`（:1567）**只被这个死函数调用**；缩略图模式并不改 `src`，全靠 CSS 尺寸 | 死代码，见 §8.5 |
 | **灯箱** | `ensureLightbox()` 单例 + `open/navigate/close` 状态机；缩放 `setZoom` 0.25 步进 + `applyZoom` 一次写 transform；`prefetchNeighbors` 预取相邻图 | :629 / :839 / :902 / :1064 / :1088 / :1055 |
 | **下载** | 同源图才走"另存为"（跨域会变成新标签页打开）；文件名由 `sanitizeName` 清洗 | `downloadCurrent` :1137、`sanitizeName` :1125 |
 | **复制路径** | `navigator.clipboard` + `textarea` 兜底，成功后 `flashButton` 反馈 | `copyImagePath` :983 |
@@ -276,7 +276,7 @@ DSH 的会话树归 React 所有。把图片 reparent 进自己创建的容器 �
 |---|---|---|
 | ① | **列宽必须落在 wrapper 上，不能落在 `<img>` 上**。每个 markdown 图各在自己的 `<p>` 里，`float` 只在自己容器内生效 → 每个 tile 仍独占一行 | 早期"列数无效"报告 |
 | ② | **wrapper 判定条件是"里面没有散文"，不是"唯一元素子节点"**。多图共享一个容器时后者直接拒绝 → 24 张只生成 12 个 wrapper | 诊断 "24 images enhanced, only 12 tile wrappers" |
-| ③ | **只用 `parentElement`，永远不用 `closest()`**。`closest()` 会一路向上找到某个"只有一个元素子节点"的大容器，给它 float:left + width:1/N → 会话头像被浮到角落并缩小 | 真实事故，已写进 `VERIFIED-BASELINE` 受保护坐标 |
+| ③ | **布局定位只用 `parentElement`，绝不用 `closest()` 去"找该 float 的容器"**。`closest()` 会一路向上撞上某个"只有一个元素子节点"的大容器，给它 float:left + width:1/N → 会话头像被浮到角落并缩小。**但 `closest()` 本身不禁用**：全文件 8 处都是"祖先类型判定"用途（跳过头像/侧栏/工具栏、判"在灯箱遮罩里"、判"在按钮里"），见 §8.5 | 真实事故 + 实测 8 处合法用法 |
 | ④ | **必须幂等 + 抑制 MutationObserver**。重复写同一个行内值也算一次 mutation，观察者据此要求再跑一遍 → 死循环冻 UI。三件套：`dataset.dshIgTile` 印章、`suppressObserver(ms)`、`setTimeout` 60ms 合并 | v1.7.2 打字冻界面 |
 | ⑤ | **短行缝隙靠"补位"而不是"换布局"**。flex 父级、inline-block 行、grid host 三种重写全部失败——grid host 要求"容器里只有图片"，而 DSH 的行里永远还有散文 | 注释原文：「None of them ran」 |
 | ⑥ | **`:has()` 是隐藏的关键**。只把 `img` 设成 `display:none`，外层 `<p>` 还在 → 留下一条空白带 | 用户"隐藏后留白"报告 |
@@ -284,6 +284,23 @@ DSH 的会话树归 React 所有。把图片 reparent 进自己创建的容器 �
 | ⑧ | **列数输入框必须回写真相**：不管用户是打字、回车、失焦还是从存储恢复，都统一 `inp.value = String(TILE_COLUMNS)` | `setTileColumns` :1503-1506 |
 | ⑨ | **样式写行内 `!important` 才能压过宿主**：`<p>` 是宿主渲染的节点，其自身样式可能胜过样式表 | `setInline` 注释 |
 | ⑩ | **旧实现被端到端验证过，就别为"更聪明"换掉**。原插件是把图片 MOVE 进自建 grid 容器（flex/grid 才能真正控制流动），验证通过后被"宿主搜寻法"替换——**缩略图模式正是这样坏掉的** | 源码注释原文 |
+
+### 8.5 现状核对表（2026-10-21 文档↔代码逐条对齐后的修订）
+
+> 本节是"经验与代码一致性"核验的产物：`E:	mplightbox-labaudit-doc-vs-code.mjs` 逐条比对行号/函数名/行为断言。
+> 首次核验 **36 条行号全中，但 2 条行为断言是我写错的**，已按代码事实改写，这里留档。
+
+| 项 | 我原先写的 | 代码事实 |
+|---|---|---|
+| 图片身份键 | "srcKey 先剥 `?w=` 再比对" | ❌ 实际 `srcKey = currentSrc || src`，**不剥参数**；剥参数发生在"取原图"三处（:920 / :1101 / :1753） |
+| 缩略图 `?w=600` | "只对本地路由图追加 `?w=600`" | ❌ `thumbnailSrcFor` **全仓零调用**、`isLocalImagePath` 只被它调用，两者都是死代码；缩略图模式不改 src |
+| `closest()` | "永远不用 `closest()`" | ⚠️ 过宽。全文件 8 处 `closest()` 都合法：:1187 跳过头像/侧栏/工具栏、:1210/:1325/:2157/:2169/:2232/:3001/:3020 判"在灯箱遮罩内"、:1248 判"在按钮内"。**禁的是拿它去爬"该 float 的容器"** |
+
+**遗留待决（未动代码，等拍板）**：
+
+1. `thumbnailSrcFor`/`isLocalImagePath` 要不要真接线？接了能省带宽、缩略图更锐，但**必须同时把 `srcKey` 改成"剥掉 `?w=` 后比对"**，否则同一张图的缩略 URL 与原图 URL 会变成两个键，`modeSrc` 记账错乱（隐藏/展开状态会串）。
+2. 不接线的话，建议删掉这两个函数（当前是"看起来有优化、实际没生效"的误导性死代码）；
+3. `tickThumb` 里那句提到 `closest()` 的只是**注释**（:1675，记录当年事故），代码里没有调用——改代码时别被注释误导成"这里还在用"。
 
 ### 8.4 由此得出的通用判断法
 
@@ -320,7 +337,7 @@ merge-base  = e359fa8  →  远端独有 0
 |---|---|
 | 插件源码 | `C:\Users\Administrator\.dsh\local-plugins\dsh-chat-image-lightbox\`（三处 profile 均为 Junction 指向此） |
 | 已验证基线 | `docs/VERIFIED-BASELINE.md`（10 条已验收功能 + 代码坐标 + 检查清单） |
-| 一键回归 | `node test/run-all.mjs --full`（19 套件）/ `IG_TOOL_ONLINE=1 node test/probe-tool-result.mjs`（真搜图过宿主闸门） |
+| 一键回归 | `node test/run-all.mjs --full`（自带 8 套件 + 实验室 11 套件 = 19，实测 19/19 全绿）/ `IG_TOOL_ONLINE=1 node test/probe-tool-result.mjs`（真搜图过宿主闸门） |
 | 真 HEVC 样本 | `test/fixtures/real-hevc.heic`（首条断言：不是错标 JPEG） |
 | 全格式素材 | `E:\tmp\lightbox-lab\formats-188\`（固定素材 10 类×2）、`formats-rand\`（随机图源 10 类×2） |
 | 素材生成器 | `E:\tmp\lightbox-lab\build-formats-188.mjs`、`build-formats-rand.mjs`（sharp 经 `createRequire(profiles/desktop/node_modules/noop.js)` 解析） |
@@ -336,7 +353,7 @@ merge-base  = e359fa8  →  远端独有 0
 1. 先跑 `node test/run-all.mjs --full`，确认 19 套件全绿（不是就先用 `git reset --hard` 回基线）。
 2. **发一张真图到正文**，让用户确认能看见——这一步不能跳（§2.1）。
 3. 确认宿主加载的是你改的代码：进程启动时间 > 源码 mtime，且日志里 `delivery law (N chars)` 与源码 `IMAGE_LAW_TEXT.length` 对得上。
-4. 动代码前读 `docs/VERIFIED-BASELINE.md` 的受保护坐标（`tickThumb` 只能用 `parentElement` 不能用 `closest()`——用 `closest()` 会把会话头像浮动到角落并缩小，真实事故）。
+4. 动代码前读 `docs/VERIFIED-BASELINE.md` 的受保护坐标（`tickThumb` **布局定位**只能用 `parentElement`，不能用 `closest()` 去爬容器——`closest()` 会把会话头像浮动到角落并缩小，真实事故；祖先类型判定用 `closest()` 是合法的，见 EXPERIENCE §8.5）。
 5. 新字段先进 `output.schema`；新数字先过 `Number.isFinite`。
 6. 改完做负控实验，证明探针有鉴别力。
 7. 报告里带实测数字与绝对路径；失败就说失败。
