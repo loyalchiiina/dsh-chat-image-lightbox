@@ -153,7 +153,8 @@ node test/probe-source-health.mjs  # 45 项：图源健康降级 / 转存并发 
 node test/probe-tool-result.mjs    # 39 项：返回值过宿主两道闸门（IG_TOOL_ONLINE=1 → 45 项含真搜图）
 node test/probe-dep-resolve.mjs    # 24 项：依赖多根解析 / 代理绕过 / 真起服务验 TIFF·HEIC 转码
 node test/probe-serve-integrity.mjs  # 33 项：交付内容完整性——magic 字节校验 / 伪装图 415 / 含 % 文件名
-node test/run-all.mjs --full       # 上面 6 个 + 实验室 11 套件 = 17 套件，一条命令全跑
+node test/probe-viewable-body.mjs  # 32 项：正文指向浏览器真能渲染的副本（TIFF→PNG / HEIC→WebP / 伪装图被拒）
+node test/run-all.mjs --full       # 上面 7 个 + 实验室 11 套件 = 18 套件，一条命令全跑
 ```
 
 > `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 45/45。
@@ -166,6 +167,15 @@ node test/run-all.mjs --full       # 上面 6 个 + 实验室 11 套件 = 17 套
 > ② 旧探针只测「函数行为对不对」，从不验证「依赖能否加载」、也不真起 HTTP 服务请求一次。
 > **教训：凡是被静默降级（`try{}catch{}` 变 `null`）的依赖，必须有一个探针证明它拿到了；**
 > **「功能能用」的证据只能来自端到端（真起服务、只认 content-type 与 magic bytes），不能来自日志里没有报错。**
+
+> 🔴 **1.8.5 的教训（症状在正文，就得从正文那条链路取证）**：1.8.4 修好 sharp 之后，**工具行**的 TIFF 能显示了，
+> 正文里的仍是「图片无法预览」。我拿工具行的修复去解释正文的症状，没有先证明两者是同一条链路。
+> 实际是两条：工具行走插件的 `/images/?abs=`（会转码），正文被宿主改写成 `api/file?path=`，
+> 而 `serveFile()` 只按扩展名给 MIME、原字节直出、**零转码**，Chromium 没有 TIFF/HEIC 解码器。
+> **教训：修复要对着症状所在的那条链路取证，不能用「相关组件已修好」代替「这条链路已修好」；
+> 同一个错误（把「没被证伪」当成「已被证实」）在 sharp 之前那次已经犯过一次。**
+> 现在的做法：`ensureViewable()` 在交付前生成浏览器可渲染的副本，`bodyPath()` 优先指向它，
+> `probe-viewable-body.mjs` 真 `apply()` + 真 `execute()`，只认交付路径指向的文件 magic。
 
 > 🔴 **同版本的第二个教训（`NODE_USE_ENV_PROXY=1`）**：「不传 `dispatcher`」≠「不走代理」。
 > Node 全局 `fetch` 会自己套 `HTTPS_PROXY`，于是 duitang 这类只认直连的站点被判成探测失败、好图被当坏图剔掉。
@@ -205,11 +215,11 @@ node test/run-all.mjs --full       # 上面 6 个 + 实验室 11 套件 = 17 套
 
 | 位置 | 版本 | 类型 | 风险 |
 |------|------|------|------|
-| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.4 | 真实目录 | **源码，唯一权威** |
-| `profiles\desktop\node_modules\...` | 1.8.4 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
-| `profiles\web\node_modules\...` | 1.8.4 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
-| `profiles\xiufu\node_modules\...` | 1.8.4 | **Junction** → local-plugins，声明 `link:` | 同上 |
-| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 / 1.8.2 / 1.8.3 / 1.8.4 都**尚未发布**（发布需用户当次授权） |
+| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.5 | 真实目录 | **源码，唯一权威** |
+| `profiles\desktop\node_modules\...` | 1.8.5 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
+| `profiles\web\node_modules\...` | 1.8.5 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
+| `profiles\xiufu\node_modules\...` | 1.8.5 | **Junction** → local-plugins，声明 `link:` | 同上 |
+| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 / 1.8.2 / 1.8.3 / 1.8.4 / 1.8.5 都**尚未发布**（发布需用户当次授权） |
 
 > ✅ **2026-10-21 起，三处副本不再是「三份拷贝」而是「同一个源」**：三个 profile 的 `dependencies` 都写成
 > `link:C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox`，`node_modules` 下是 Junction。
@@ -259,7 +269,8 @@ unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source
 - [ ] `node test/probe-tool-result.mjs` 39/0（改过返回值/`output.schema` 时必须）
 - [ ] `node test/probe-dep-resolve.mjs` 24/0（改过依赖加载/网络层时必须——这是唯一能证明 `sharp` 真拿到了的探针）
 - [ ] `node test/probe-serve-integrity.mjs` 33/0（改过下载/转存/发送链路时必须——它证明的是「发出去的东西真是图片」）
-- [ ] `node test/run-all.mjs --full` 17 套件全绿（一条命令代替逐条手跑）
+- [ ] `node test/probe-viewable-body.mjs` 32/0（改过交付/转码/正文路径时必须——它证明的是「正文那张图浏览器真的能画出来」）
+- [ ] `node test/run-all.mjs --full` 18 套件全绿（一条命令代替逐条手跑）
 - [ ] `E:\tmp\lightbox-lab` 11 套件全绿
 - [ ] 网格布局视觉验证：发 ≥10 张图，确认「并列 / 等高 / 末行补齐 / 文字回左端」
 - [ ] 正文无路径泄漏（引用式定义行不上屏）

@@ -1,3 +1,69 @@
+## 1.8.5 — 2026-10-21
+
+### 🔴 修：正文里的 TIFF / HEIC 永远显示不出来 —— 正文那条路根本不经过插件的转码
+
+1.8.4 修好了 sharp 的加载，工具行里的 `<img>` 已经能正常显示 TIFF 了，
+但**对话正文里**的图仍然是「图片无法预览」。这不是没修干净，是修错了地方：
+两条路走的根本不是同一个 handler。
+
+**两条路的区别（在 `app.asar` 里逐字读到）**
+
+| | 工具行里的图 | 正文里的图 |
+|---|---|---|
+| 谁在服务 | 插件的 `/images/?abs=…` | 宿主 `api/file?path=…` |
+| 会不会转码 | 会（`imageFileHandler` 里 TIFF→PNG） | **不会** |
+| MIME 怎么定 | 插件按转码结果给 | `mime.lookup(扩展名)` |
+| 字节怎么出 | 转码后的 PNG | `fs.readBytes` 原样流出 |
+
+正文里 `![](C:/…/x.tiff)` 的流转是：
+`parseFileLink` → `fileImages.resolve` → `localPathMediaUrl` → `fileMediaUrl`
+→ **`api/file?path=…`** → `serveFile()`。而 `serveFile()` 的全部工作是
+
+```js
+const mediaType = mime.lookup(target.displayPath) || "application/octet-stream";
+headers = { ...BASE_HEADERS, "Content-Type": mediaType };
+const bytes = await fs.readBytes(target, request.signal, maxBytes);
+return new Response(bytes.slice(), { headers });
+```
+
+按扩展名给 MIME、原字节直出、**一个字节都不转**。于是 `.tiff` 被答成 `image/tiff`，
+Chromium 没有 TIFF 解码器 → 加载失败 → 正文「图片无法预览」。HEIC 同理。
+插件里那段无损转码只能救工具行，救不了正文——这是结构性缺陷，与 sharp 是否可用无关。
+
+**修法**：正文不再指向原文件，改指一个**浏览器能直接渲染的副本**。
+
+- 新增 `ensureViewable(item, width)`：对每个本地文件，如果格式是 Chromium 解不了的
+  （`.tif`/`.tiff`/`.heic`/`.heif`/`.avif` 之外的非渲染格式），用 sharp 转一份到自动缓存目录——
+  无损源出 PNG，其余出 WebP q92。
+- 新增 `headBytes(file, n)`：判 magic 只读头 16 字节。不能为了看 4 个字节把 60 MB 的
+  TIFF 整个读进内存（第一版这么写的，已改）。
+- `bodyPath()` 优先 `item.viewPath`：正文指向转码副本，`localPath` 仍保留原文件
+  （下载、复查、将来重新转码都还要它）。`viewPath` 被缓存清理删掉时自动回退，不会发出死路径。
+- **字节上限收缩循环**：宿主 `api/file` 按 `attachments.imageLimits.maxImageBytes`
+  流式输出，默认 **20 MB**，超了答 413，正文同样显示「图片无法预览」。
+  一张 TIFF 图表按原尺寸转 PNG 轻松到 60 MB，所以转码后仍 >16 MB 就按 0.7 递减宽度重转，
+  最多 5 轮，到 1024 为止；还不达标就明确报错而不是发出去。
+- **顺手把「后缀是图片、内容不是图片」的就地剔除**：转码前用 `headBytes` 验 magic，
+  伪装成 `.jpg` 的 CDN 错误页在正文交付前就被拦下，并在 note 里说明是「内容却不是图片
+  （多半是图源返回的错误页）」，而不是笼统的「转码失败」。
+- 全部图都不可交付时明确抛错，并**分别**说明两种原因：TIFF/HEIC 需要 sharp；
+  或图源返回的是错误页、建议换关键词。
+
+**验收**：`node test/probe-viewable-body.mjs` → 32/32。它不看「插件能不能转码」
+（`probe-dep-resolve` 已测），只看**交付给正文的那个路径指向的文件，浏览器能不能直接渲染**：
+真的 `apply()`、真的 `execute()`，TIFF 进来的 `markdown` 必须指向 PNG 且 magic 是 `89504e47`，
+`.heic` 必须指向 WebP 且 magic 是 `52494646`，普通 PNG 不许被无谓转码，
+伪装成 `.jpg` 的 HTML 必须被拒。`node test/run-all.mjs --full` → 18 套件全绿。
+
+**教训**：1.8.4 修的 sharp 是真问题，但它只解释「工具行也不显示」。我拿工具行的修复
+去解释正文的症状，没有先证明两者是同一条链路——同一个错误在 sharp 之前那次
+（把探测失败当成可加载）已经犯过一次。**症状在正文，就得从正文那条链路取证。**
+
+### 顺带：`display_image` 返回值新增 `viewPath`
+
+`output.schema.images.items.properties` 加了 `viewPath: { type: "string" }`
+（`additionalProperties: false`，漏声明会让整条结果被校验器丢弃——1.8.2 就是这么整条作废的）。
+
 ## 1.8.4 — 2026-10-21
 
 ### 🔴 修：TIFF / HEIC 一律「图片无法预览」——插件装成 Junction 后依赖加载不到

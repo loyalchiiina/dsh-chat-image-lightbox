@@ -172,6 +172,18 @@ Pictures from your agent sit tiny inside a bubble — to see detail you have to 
 - **The auto-rescue cache no longer grows forever (1.8.1)**: `~/.dsh/image-gallery-auto` was write-only (measured: 129 files / 187 MB). It is now checked before every rescue and pruned oldest-first past 500 files or 512 MB (a file that cannot be deleted does not abort the sweep)
 - **Survives a Junction install (1.8.4)**: the plugin is a directory **Junction** into `local-plugins` in all three profiles. Node resolves `require` from the module's **real path**, so `createRequire(import.meta.url)("sharp")` walked up from `local-plugins/` while `sharp`/`undici` live in `profiles/<name>/node_modules` — the link cut them out of the chain. Consequence: the startup line said `sharp: unavailable` and **every TIFF/HEIC rendered as "图片无法预览"**, and `undici` was unreachable too. `resolveDep()` now searches several roots (module path / `process.execPath` / `EXEPATH` / `cwd`, eight levels up each) and all three dependencies go through it
 - **Direct really means direct (1.8.4)**: with `NODE_USE_ENV_PROXY=1`, Node's global `fetch` applies `HTTPS_PROXY` **by itself** — omitting `dispatcher` does not mean "no proxy". Hosts that only answer direct requests (duitang) were therefore reported as "probe failed" and good images were dropped as broken. Direct fetches now use `node:https` with an **explicit Agent** (ignoring env proxies entirely, 5 redirect hops max); `getBytes()` tries runtime fetch first and falls back to direct on transport failure, treating an HTTP status as the answer rather than grounds for a second route
+- **The body no longer points at a file the browser cannot decode (1.8.5)** — once 1.8.4 fixed
+  `sharp`, TIFFs displayed correctly **in the tool row** but still showed "图片无法预览" **in the
+  reply body**, because those two paths are served by different handlers. A body image written as
+  `![](C:/…/x.tiff)` is rewritten by the Host into `api/file?path=…`, and `serveFile()` there does
+  nothing but `mime.lookup(extension)` and stream the **original bytes** through — no transcoding at
+  all. Chromium has no TIFF/HEIC decoder, so the `<img>` fails. Every local picture is now
+  transcoded to a browser-renderable copy before delivery (lossless sources → PNG, others → WebP
+  q92); the body names that copy while `localPath` keeps the original. If the result still exceeds
+  the Host's per-image limit (default 20 MB — a 413 which also renders as "图片无法预览"), the width
+  is reduced by 0.7 and retried, five rounds at most. Files whose extension says image but whose
+  magic bytes say otherwise (a saved CDN error page) are dropped before delivery with the reason
+  stated ("后缀是 .jpg，内容却不是图片") instead of a vague transcode failure
 - **Trust the bytes, not the `200` or the content-type (1.8.4)** — one "successfully rescued"
   cache file was actually a CDN error page (HTTP 200, `content-type: image/jpeg`, body starting
   `<!doctype html>`). It was served as `image/jpeg`, the browser failed to decode it, and the
@@ -374,6 +386,7 @@ MIT
 - **失败必须说出来（1.8.1）**：转存失败原先被空 `catch (e) {}` 吞掉，用户只看到坏图、日志一片安静。现在失败原因记在 `rescueError` 上，并在 note 里写明「有 N 张被原站点拦截且无法转存」，让「发不出图」这件事至少是**可见**的
 - **依赖装成 Junction 也不会失联（1.8.4）**：插件在三个 profile 里都是**目录 Junction** 指向 `local-plugins`。Node 解析 `require` 用的是模块**真实路径**，所以 `createRequire(import.meta.url)("sharp")` 会从 `local-plugins/` 往上找，而 `sharp`/`undici` 都在 `profiles/<name>/node_modules` —— 直接被链接抹掉。后果是启动日志写 `sharp: unavailable`，**所有 TIFF/HEIC 一律「图片无法预览」**，而且 `undici` 也拿不到。现在用 `resolveDep()` 多根解析（模块路径 / `process.execPath` / `EXEPATH` / `cwd`，各自向上 8 层），三处依赖全部改走它
 - **直连必须真直连（1.8.4）**：本机 `NODE_USE_ENV_PROXY=1` 时，Node 全局 `fetch` 会**自己**套用 `HTTPS_PROXY` —— 不传 `dispatcher` 并不等于不走代理。于是 duitang 这类只认直连的站点被抓成「探测失败」，好图被当坏图剔掉。现在直连用 `node:https` + **显式 Agent**（完全无视 env 代理，自带 5 跳重定向），`getBytes()` 先试 runtime fetch、transport 失败再直连；HTTP 状态码视为答案、不换路重试
+- **正文里的图不再指向浏览器解不了的原文件（1.8.5）** —— 1.8.4 修好 sharp 之后，**工具行**的 TIFF 能显示了，但**正文**里的图仍然是「图片无法预览」：这两条路根本不走同一个 handler。正文里的 `![](C:/…/x.tiff)` 由宿主改写成 `api/file?path=…`，而 `serveFile()` 只按扩展名给 MIME、把原始字节直接流出去，**一个字节都不转码**，Chromium 没有 TIFF/HEIC 解码器，于是加载失败。现在交付前先用 sharp 转一份浏览器能直接渲染的副本（无损源出 PNG、其余出 WebP），正文指向这份副本、原文件仍保留在 `localPath`；转码后仍超过宿主单图上限（默认 20 MB，超了答 413 同样是「图片无法预览」）就按 0.7 递减宽度重转，最多 5 轮。顺带在交付前用 magic 字节把「后缀是图片、内容是错误页」的文件就地剔除，并在 note 里说明是「内容却不是图片（多半是图源返回的错误页）」而不是笼统说转码失败
 - **不信任 `200` 和 `content-type`，只信任字节（1.8.4）** —— 一个「转存成功」的缓存文件
   实际是 CDN 的错误页（HTTP 200、content-type 写着 `image/jpeg`、正文是 `<!doctype html>`），
   handler 照旧标成 `image/jpeg` 发出去，浏览器解不开就是「图片无法预览」。现在下载、探测、
