@@ -1,3 +1,74 @@
+## 1.8.0 — 2026-10-20
+
+### 🐞 修：两个常驻节点长期占用 `role="dialog"`，会让别的插件把界面卡成不可点
+
+**症状（不是本插件可见，而是别人的插件坏了）**
+
+用户报「设置点了没反应」，整个界面点不动。真实的因果链不在本插件里，但**起点在本插件**：
+
+```js
+// Agents AnyWhere 的关闭回调首行
+if (document.querySelectorAll('[role="dialog"]').length > 1) return;
+```
+
+它会先给 `#root` 加 `inert`，关闭时再撤掉。上面那行闸门一旦为真，`✕` 被**静默吞掉**，`inert` 就撤不掉 —— 全应用点击失效。
+
+本插件有两个**常驻 `<body>`** 的节点，关闭时只是 `display:none` / `visibility:hidden`：
+
+| 节点 | 何时创建 | 原实现的错误 |
+|---|---|---|
+| `.dsh-ig-backdrop`（图片查看器外壳） | 首次打开图片时 | 创建即挂 `role="dialog"`，此后**永不摘除** |
+| `.dsh-ig-pop`（工具栏面板） | **mount 阶段**（要塞 4 个真实控件进去） | 创建即挂 `role="dialog"`，用户可能**一辈子不点开**它 |
+
+`display:none` / `visibility:hidden` **不会**让 `querySelectorAll` 漏掉节点。于是「常驻 2 个 + 别人的弹窗 1 个」= 3 > 1，闸门永远为真。
+
+**修复（`lib/client.js` 五处）**
+
+- `ensureLightbox()` / `ensurePopover()`：**创建时不挂 `role`**，只保留 `aria-label`（可发现性不丢）
+- `open()` / `openPopover()`：装 `role="dialog"` + `aria-modal="true"`
+- `close()` / `closePopover()`：摘 `role` / `aria-modal` / `tabindex`
+
+无障碍语义跟着**可见性**走，而不是跟着**创建**走。
+
+**验证：`test/probe-poprole.mjs`（15 项，且证明有鉴别力）**
+
+从 bundle 抠出真实的 `ensurePopover` / `openPopover` / `closePopover`，配最小 DOM 桩跑三态：
+
+| 断言 | 修复前 | 修复后 |
+|---|---|---|
+| T1 创建后不得带 `role` | **FAIL** `role=dialog` | PASS `null` |
+| T1 创建后全局弹窗计数 = 0 | **FAIL** `count=1` | PASS `count=0` |
+| T1 保留 `aria-label` | PASS | PASS |
+| T2 打开后 `role`/`aria-modal` | 部分 FAIL | PASS |
+| T3 关闭后必须摘掉 | **FAIL** `role=dialog` | PASS |
+| T3 关闭后计数 = 0 | **FAIL** `count=1` | PASS |
+| T4 第二次打开语义不丢 | PASS | PASS |
+
+**鉴别力自证**：`LB_SRC=<修复前文件> node test/probe-poprole.mjs` → **10 通过 / 5 失败**；对当前代码 → **15 通过 / 0 失败**。一个新探针在修复后全绿只能说明「没坏」，必须拿它跑修复前版本、跑红，才算真的在测这件事。
+
+### 🐞 修：同一条消息里两次 `display_image`，第二组图会显示成第一组
+
+正文改引用式后，标签原本是**裸 1 基序号**（`[1]:`、`[2]:`…）。序号只在**单次调用内**唯一，而一条回复里放多次调用是常态（投递铁律就要求「每批图各自成段」）。两次调用都发 `[1]:` 时，mdast **保留最早的 definition** —— 第二组图静默指向第一组的文件。
+
+修复：标签加 3 位 base-36 盐（`var salt = Math.random().toString(36).slice(2,5) || "z9"`，`label = salt + (i+1)`）。代价是流式字面量从 8 字符升到 11 字符（`![图1][k3f1`）；收益是避免「显示错图」，这个交换成立。
+
+### 🧪 测试迁移（不是产品缺陷）
+
+- `regress.mjs`：正文从内联 `![](dest)` 改为引用式后，抽取器同步重写（先收定义行、再按文档序回填），并新增「两次调用标签唯一性」断言块 → **10/10**
+- `bodyurl.mjs`：`bodyUrl` 已重命名为 `bodyPath`（返回 `{local, value}`），单元层改按对象比较 → **12/12**
+
+### 同步内容
+
+- `package.json` `version` 1.7.9 → **1.8.0**
+- 新增 `test/probe-poprole.mjs`、`test/probe-rowclear.mjs`
+
+### 教训
+
+1. **「成对实现」不等于「成对执行」**。`openPopover`/`closePopover` 看着完全对称、读码挑不出毛病；漏的是**第三条路径 —— 创建**。凡是「创建 → 打开 → 关闭」三态的资源，准入属性只能在**打开**时给，不能在**创建**时给。
+2. **常驻节点 + 全局角色 = 生态级 bug**。`display:none` 挡得住眼睛，挡不住 `querySelectorAll`。任何插件只要用「数弹窗」做闸门，就会被这个幽灵节点永久带偏。
+3. **探针必须自证有鉴别力**。本轮第一版探针是**假绿**：`ensurePopover()` 根本没被执行（桩里 `mod` 取成了 factory 函数本身，`apply` 落到 `Function.prototype.apply`），`count=0` 是「什么都没创建」而不是「创建了但没有 role」。改成抠函数源码 + 受控作用域后，才对修复前版本跑出 5 红。
+4. **两个分支会悄悄分叉**：这两个修复一度只存在于 web 的 `node_modules`（1.7.10 / 1.7.11），**从未进过 main、也从未发到 npm**（npm `versions` 尾部就是 `1.7.9`）。只比「本地 vs 实装」两方是查不出来的。
+
 ## 1.7.9 — 2026-10-19
 
 ### 文档与代码对齐（无功能改动）
