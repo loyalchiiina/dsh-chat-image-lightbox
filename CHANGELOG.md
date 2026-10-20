@@ -1,3 +1,49 @@
+## 1.8.3 — 2026-10-21
+
+### 🟠 修：健康门禁把「探测失败」当成「可加载」，抽样 4/4 全绿却仍有坏图
+
+**症状**：`display_image(query="毛晓彤")` 返回的 note 写着
+「图源：Bing 图片（抽样 4 张，4 张可加载）」，但正文里 5 张图有 3 张加载失败。
+
+**根因**：`probeRemoteForBrowser()` 有三种返回形态，`sampleSourceHealth()` 只数了两种：
+
+| 形态 | 含义 | 1.8.1/1.8.2 的算法 | 应该算 |
+|---|---|---|---|
+| `{blocked:true}` | 站点明确拒绝（非 2xx / 不是图片） | 拦截 | 不可加载 |
+| `{blocked:false}` | 拿到 2xx 且 content-type 是 image/* | ✅ 可加载 | 可加载 |
+| `{blocked:false, error:...}` | **网络/TLS 失败，根本没探到** | **❌ 也算可加载** | 不可加载（未验证） |
+
+第三种当初是刻意留的（注释原文「A genuine network failure is not proof of hotlink protection:
+leave it.」）——**不判它防盗链是对的，但顺手把它算成「可加载」是错的**。
+实测（1.8.3 取证，真搜一次）：
+
+```
+note 原值：图源：Bing 图片（抽样 4 张，4 张可加载）
+逐张实测：200 image/jpeg  ✓
+          200 image/jpeg  ✓
+          fetch failed    ✗  ← 却被算进「可加载」
+          fetch failed    ✗
+```
+
+直接后果：**图源健康门禁（ratio < 0.3 换源）被这类失败稀释**，明明一半图打不开，
+`ratio` 仍是 1.0，于是不换源、也不在 note 里说一句——用户看到的还是坏图，
+而 note 还向他保证「4 张可加载」。这正是 1.8.1 想根治的那个谎言的最后一个出口。
+
+**修复**：
+
+- `sampleSourceHealth()` 三种结果分开计数，返回 `{sampled, ok, failed, blocked, ratio}`，
+  **`ratio` 只由「确认取到 2xx 图片」的张数决定**；
+- `failed` 不写回 `blocked`（探测失败不是防盗链证据，转存路径不该被它触发）；
+- 换源原因里如实区分：「N 张被站点拦截」vs「N 张探测失败（网络/TLS 未通，未验证）」；
+- note 同样分列：`抽样 4 张，3 张可加载，1 张探测失败（未验证）`。
+
+**探针**：`probe-source-health.mjs` 37 → **42** 项，新增 5 条（3 条行为 + 2 条静态），
+其中一条是这次的等价输入：`1 张被拦 + 2 张探测失败 → ok=1 / failed=2 / ratio=0.25`，
+低于 0.3 必须换源。
+
+**回归**：`node test/run-all.mjs --full` → **15 套件全绿 / 0 失败**；
+`IG_TOOL_ONLINE=1 node test/probe-tool-result.mjs` → **45/45**（真搜一次，过宿主两道闸门）。
+
 ## 1.8.2 — 2026-10-21
 
 ### 🔴 修：搜图 100% 报错——返回值被 DSH 两道闸门整条丢弃（1.8.1 引入的回归）

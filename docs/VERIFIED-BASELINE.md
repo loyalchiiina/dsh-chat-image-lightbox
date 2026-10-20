@@ -149,12 +149,14 @@ definition 块在宿主 `renderNode` 里 `return null`，`renderBlocks` 又 `.fi
 ```bash
 node test/probe-rowclear.mjs       # 18 项：clear 插入位置/幂等/多段
 node test/probe-poprole.mjs        # 15 项：role=dialog 只在打开时存在
-node test/probe-source-health.mjs  # 37 项：图源健康降级 / 转存并发 / 缓存上限 / 搜狗 forbid
+node test/probe-source-health.mjs  # 42 项：图源健康降级 / 转存并发 / 缓存上限 / 搜狗 forbid / 探测失败不算可加载
 node test/probe-tool-result.mjs    # 39 项：返回值过宿主两道闸门（IG_TOOL_ONLINE=1 → 45 项含真搜图）
 node test/run-all.mjs --full       # 上面 4 个 + 实验室 11 套件 = 15 套件，一条命令全跑
 ```
 
-> `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 37/37。
+> `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 42/42。
+
+> 🟠 **1.8.3 的教训（同一条假设的第三个出口）**：健康采样把 `probeRemoteForBrowser` 的**三种**返回形态只数成两种 —— `{blocked:false, error:...}`（网络/TLS 根本没探到）竟被算作「可加载」。真搜一次 4 张里 2 张 `fetch failed`，note 仍写「4 张可加载」、`ratio` 仍 1.0，于是门禁不换源。**教训：健康判定的「正例」必须是被证实的正例（确认 2xx + image/*），不能是「没被证伪」。**
 
 > 🔴 **`probe-tool-result.mjs` 的存在理由（1.8.2 的代价换来的）**：1.8.1 的 14 套件全绿，却在用户重启后**搜图 100% 报错** —— 因为所有旧探针都只测到 `searchImages` 这一层函数，**从不构造真实工具返回值**，也就从不经过宿主的两道闸门：
 > ① 无损 JSON（嵌套 `undefined`/`NaN`/`Infinity`/`-0` → 整条结果被丢，报 `value is not lossless JSON`）；
@@ -191,11 +193,11 @@ node test/run-all.mjs --full       # 上面 4 个 + 实验室 11 套件 = 15 套
 
 | 位置 | 版本 | 类型 | 风险 |
 |------|------|------|------|
-| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.1 | 真实目录 | **源码，唯一权威** |
-| `profiles\desktop\node_modules\...` | 1.8.1 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
-| `profiles\web\node_modules\...` | 1.8.1 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
-| `profiles\xiufu\node_modules\...` | 1.8.1 | **Junction** → local-plugins，声明 `link:` | 同上 |
-| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 都**尚未发布**（发布需用户当次授权） |
+| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.3 | 真实目录 | **源码，唯一权威** |
+| `profiles\desktop\node_modules\...` | 1.8.3 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
+| `profiles\web\node_modules\...` | 1.8.3 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
+| `profiles\xiufu\node_modules\...` | 1.8.3 | **Junction** → local-plugins，声明 `link:` | 同上 |
+| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 / 1.8.2 / 1.8.3 都**尚未发布**（发布需用户当次授权） |
 
 > ✅ **2026-10-21 起，三处副本不再是「三份拷贝」而是「同一个源」**：三个 profile 的 `dependencies` 都写成
 > `link:C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox`，`node_modules` 下是 Junction。
@@ -241,7 +243,7 @@ unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source
 - [ ] `node --check lib/client.js` 通过
 - [ ] `node test/probe-rowclear.mjs` 18/0
 - [ ] `node test/probe-poprole.mjs` 15/0
-- [ ] `node test/probe-source-health.mjs` 37/0
+- [ ] `node test/probe-source-health.mjs` 42/0
 - [ ] `node test/probe-tool-result.mjs` 39/0（改过返回值/`output.schema` 时必须）
 - [ ] `node test/run-all.mjs --full` 15 套件全绿（一条命令代替逐条手跑）
 - [ ] `E:\tmp\lightbox-lab` 11 套件全绿

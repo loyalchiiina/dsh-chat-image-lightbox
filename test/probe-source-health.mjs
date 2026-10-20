@@ -46,8 +46,12 @@ chk("searchImages 调用了 sampleSourceHealth", /var health = await sampleSourc
 chk("低于阈值时会记录并继续下一个源", /health\.ratio < SOURCE_HEALTH_MIN/.test(src));
 chk("所有源都不达标时退回可加载率最高者", /if \(!fallback \|\| health\.ratio > fallback\.ratio\)/.test(src));
 chk("退回时标记 degraded 供调用方如实告知", /return \{ images: fallback\.images, source: fallback\.source, errors: errors, degraded: true \};/.test(src));
-chk("健康度报告的是抽样实测值（不是整批推算）", /health: \{ ok: health\.ok, sampled: health\.sampled \}/.test(src));
+chk("健康度报告的是抽样实测值（不是整批推算）",
+  /health: \{ ok: health\.ok, sampled: health\.sampled, failed: health\.failed \}/.test(src));
 chk("没有把 ratio 外推成整批数量", !/Math\.round\(health\.ratio \* clean\.length\)/.test(src));
+// 1.8.3：探测失败（网络/TLS）必须与「可加载」「被拦」分开计数
+chk("sampleSourceHealth 把探测失败单独计数", /else if \(p\.error\) \{ failed\+\+; \}/.test(src));
+chk("note 会如实报出探测失败张数", /张探测失败（未验证）/.test(src));
 chk("搜狗 forbid 被识别为图源不可用", /\/forbid\/i\.test\(String\(data\.info \|\| ""\)\)/.test(src));
 chk("已抽样的图不再重复探测", /picked\[pi\]\.blocked !== true/.test(src));
 chk("转存走 4 路并发", /await mapLimit\(blockedIdx, 4, async function \(idx\)/.test(src));
@@ -100,6 +104,28 @@ if (healthSrc) {
     const r = await fn(imgs, 4);
     chk("3/4 可加载 → ratio=0.75", r.sampled === 4 && r.ok === 3 && Math.abs(r.ratio - 0.75) < 1e-9);
     chk("只有被拦的那张带 blocked", imgs[0].blocked === true && !imgs[1].blocked && !imgs[2].blocked && !imgs[3].blocked);
+  }
+  // 🔴 1.8.3 实测根因：网络/TLS 探测失败曾被算成「可加载」——
+  //    真搜一次 4 张里 1 张 TLS 断开，note 仍报「4 张可加载」，用户照样看到坏图。
+  {
+    const imgs = [{ url: "a" }, { url: "b" }, { url: "c" }, { url: "d" }];
+    const fn = make(async (u) => (u === "d"
+      ? { url: u, blocked: false, error: "fetch failed" }
+      : { url: u, blocked: false }));
+    const r = await fn(imgs, 4);
+    chk("探测失败的图不计入 ok（3/4 而不是 4/4）",
+      r.ok === 3 && r.failed === 1 && Math.abs(r.ratio - 0.75) < 1e-9);
+    chk("探测失败不算防盗链（不给它打 blocked）", imgs[3].blocked === undefined);
+  }
+  // 1 张被拦 + 2 张探测失败 → 0.25 < 0.3，必须触发换源（否则用户拿到一屏坏图）
+  {
+    const imgs = [{ url: "a" }, { url: "b" }, { url: "c" }, { url: "d" }];
+    const fn = make(async (u) => (u === "a" ? { url: u, blocked: true }
+      : (u === "b" || u === "c") ? { url: u, blocked: false, error: "TLS 断开" }
+        : { url: u, blocked: false }));
+    const r = await fn(imgs, 4);
+    chk("1 拦 + 2 探测失败 → ok=1 / failed=2 / ratio=0.25（低于 0.3 换源）",
+      r.ok === 1 && r.blocked === 1 && r.failed === 2 && Math.abs(r.ratio - 0.25) < 1e-9);
   }
   // 全被拦（花瓣 567 现场的等价输入）→ ratio=0，调用方据此换源
   {
