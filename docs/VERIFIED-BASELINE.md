@@ -147,9 +147,13 @@ definition 块在宿主 `renderNode` 里 `return null`，`renderBlocks` 又 `.fi
 ### 4.1 插件自带探针（`test/`）
 
 ```bash
-node test/probe-rowclear.mjs     # 18 项：clear 插入位置/幂等/多段
-node test/probe-poprole.mjs      # 15 项：role=dialog 只在打开时存在
+node test/probe-rowclear.mjs       # 18 项：clear 插入位置/幂等/多段
+node test/probe-poprole.mjs        # 15 项：role=dialog 只在打开时存在
+node test/probe-source-health.mjs  # 37 项：图源健康降级 / 转存并发 / 缓存上限 / 搜狗 forbid
+node test/run-all.mjs --full       # 上面 3 个 + 实验室 11 套件 = 14 套件，一条命令全跑
 ```
+
+> `probe-source-health.mjs` 的鉴别力是实测的：把 `IG_SRC` 指向 1.8.0 的源码（`git show 13a1b49:lib/index.js`）跑同一套断言 → 22 项只过 4 项；对新代码 → 37/37。
 
 ### 4.2 实验室 11 套件（`E:\tmp\lightbox-lab`）
 
@@ -181,13 +185,16 @@ node test/probe-poprole.mjs      # 15 项：role=dialog 只在打开时存在
 
 | 位置 | 版本 | 类型 | 风险 |
 |------|------|------|------|
-| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.0 | 真实目录 | **源码，唯一权威** |
-| `profiles\desktop\node_modules\...` | 1.8.0 | **symlink** → local-plugins | 改源码即生效，安全 |
-| `profiles\web\node_modules\...` | 1.7.11 | 真实目录 | 落后，且 profile 声明是 `"1.7.9"` → **重启会按声明回退** |
-| `profiles\xiufu\node_modules\...` | 1.7.6 | 真实目录 | 落后 |
-| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 都**未发布** |
+| `.dsh\local-plugins\dsh-chat-image-lightbox` | 1.8.1 | 真实目录 | **源码，唯一权威** |
+| `profiles\desktop\node_modules\...` | 1.8.1 | **Junction** → local-plugins，声明 `link:` | 改源码即生效，安全 |
+| `profiles\web\node_modules\...` | 1.8.1 | **Junction** → local-plugins，声明 `link:` | 2026-10-21 由「npm 固定版本 + 真实目录」改造而来，同 desktop |
+| `profiles\xiufu\node_modules\...` | 1.8.1 | **Junction** → local-plugins，声明 `link:` | 同上 |
+| npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 都**尚未发布**（发布需用户当次授权） |
 
-> 🔴 **改完 local-plugins 后，必须同步 web 与 xiufu 副本，并把两个 profile 的 `package.json` 声明改成同一版本**，否则重启会被拉回旧版。
+> ✅ **2026-10-21 起，三处副本不再是「三份拷贝」而是「同一个源」**：三个 profile 的 `dependencies` 都写成
+> `link:C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox`，`node_modules` 下是 Junction。
+> 这样既天然一致，也**不会再出现「重启按声明回退到旧版」**（`link:` 形态不参与版本号比对）。
+> 改造前的两份旧副本已备份在 `~\.dsh\backups\lightbox-1.8.1-sync-*`。
 
 ---
 
@@ -228,9 +235,11 @@ unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source
 - [ ] `node --check lib/client.js` 通过
 - [ ] `node test/probe-rowclear.mjs` 18/0
 - [ ] `node test/probe-poprole.mjs` 15/0
+- [ ] `node test/probe-source-health.mjs` 37/0
+- [ ] `node test/run-all.mjs --full` 14 套件全绿（一条命令代替逐条手跑）
 - [ ] `E:\tmp\lightbox-lab` 11 套件全绿
 - [ ] 网格布局视觉验证：发 ≥10 张图，确认「并列 / 等高 / 末行补齐 / 文字回左端」
 - [ ] 正文无路径泄漏（引用式定义行不上屏）
-- [ ] 同步 web + xiufu 副本 + 两个 profile 的 `package.json` 声明
+- [ ] 三处副本一致性：三个 profile 均为 `link:` + Junction（2026-10-21 起结构上自动一致，改完抽验一次 SHA256 即可）
 - [ ] CHANGELOG 记录（含"为什么改"而不只是"改了什么"）
 - [ ] 🔴 发布（git push / npm publish）前**单独向用户取得当次授权**

@@ -117,7 +117,7 @@ The **"对话图显控制"** button in the composer row opens a panel with three
 
 | 中文 | English |
 |---|---|
-| 关键词搜网图（花瓣/Bing/搜狗 3 源回退） | Keyword image search (Huaban / Bing / Sogou fallback) |
+| 关键词搜网图（Bing/花瓣/搜狗 3 源回退，按抽样可加载率选源） | Keyword image search (Bing / Huaban / Sogou fallback, source chosen by sampled loadability) |
 | 搜图自动过滤广告与他人面孔 | Auto-filters adverts & other celebrities |
 | 本地文件/目录直读（TIFF/HEIC 转码） | Read local files/dirs (TIFF/HEIC transcoded) |
 | 网图落地保存到本地目录（`save_to`） | Save remote images to a local folder (`save_to`) |
@@ -164,8 +164,12 @@ Pictures from your agent sit tiny inside a bubble — to see detail you have to 
 - **Only conversation images**: the plugin deliberately ignores pictures outside the message list — the signed-in account avatar and the sidebar glyphs are ordinary `<img>` elements too, and they are left untouched (fixed in 1.7.2)
 - **Safe by construction**: the thumbnail look is applied with classes and inline styles only. No node is ever moved, removed or reparented — an earlier build that did so made DSH's conversation slot throw `DOMException` and render the transcript empty
 - **Auto-enhance**: MutationObserver automatically enhances new images added to the chat, and re-adopts images whose class a React re-render overwrote
-- **Bring images into the chat (`display_image` tool, host side)**: one tool takes a local `path` (file **or** directory — TIFF/HEIC transcoded, optional downscale), a remote `url`, or a `query` (keyword image search: Huaban first, Bing as fallback) and returns ready-to-paste Markdown. Any file on this machine can be served in place via `/images/?abs=<path>` (loopback-only), no copying into the gallery root required
+- **Bring images into the chat (`display_image` tool, host side)**: one tool takes a local `path` (file **or** directory — TIFF/HEIC transcoded, optional downscale), a remote `url`, or a `query` (keyword image search: Bing first, then Huaban and Sogou — each source is gated by a sampled loadability check, so a source that has results but no loadable pictures is skipped) and returns ready-to-paste Markdown. Any file on this machine can be served in place via `/images/?abs=<path>` (loopback-only), no copying into the gallery root required
 - **Hotlink fallback (1.7.2)**: a search result can answer `200` and still fail in the browser, because some CDNs (Huaban via Tencent EdgeOne) reject any request whose `Referer` is not their own domain — the picture then shows as "无法预览". The tool now probes each URL the way a browser would and **only** re-saves the ones that would be blocked, so working links stay direct and nothing is downloaded unnecessarily
+- **Source-health gate (1.8.1)**: "the API answered with results" used to be read as "the source is usable". Huaban's search API keeps answering `200` with twenty pins while **every** one of its image URLs returns `567` from Tencent EdgeOne — so a search returned five pictures that all rendered as "图片无法预览", and because the first source "had results" the search never fell through to another one. Each source is now **sampled (4 URLs, probed the way a browser would)**; below a 30% loadability ratio the source is skipped with the reason recorded, and if no source clears the bar the best one is used with that stated plainly in the note. Source order is now the one that measurably works (**Bing → Huaban → Sogou**; Sogou now answers anonymous callers with `forbid`, which is reported as "source unavailable" instead of being silently read as "no pictures found")
+- **Concurrent rescue (1.8.1)**: rescuing blocked images was serial — ten pictures took 18.4s. It is now four lanes wide (result order preserved, one failure does not cancel the rest), and URLs already probed by the health sample are not probed a second time
+- **Failures are stated (1.8.1)**: a failed rescue used to vanish into an empty `catch (e) {}`, leaving the user with broken thumbnails and a silent log. The reason is now recorded on `rescueError` and surfaced in the note ("N images were blocked by the origin and could not be rescued"), so "no image came through" is at least **visible**
+- **The auto-rescue cache no longer grows forever (1.8.1)**: `~/.dsh/image-gallery-auto` was write-only (measured: 129 files / 187 MB). It is now checked before every rescue and pruned oldest-first past 500 files or 512 MB (a file that cannot be deleted does not abort the sweep)
 - **Image-delivery law (1.7.8)**: the plugin keeps a resident system-prompt rule (`image-gallery:delivery-law`, order 1500) requiring every delivered image to appear **in the reply body** as `![](…)` markdown rather than only inside the `display_image` tool row. **Tool rows are collapsed by default**, so a user scrolling the transcript sees nothing and reasonably concludes no image was sent. The rule also forbids "see above" / "sent N images" phrasing and forbids passing off a file path or a bare link as a delivered image. Opt out with `config.injectImageLaw: false`.
 
 ### Installation
@@ -349,8 +353,12 @@ MIT
 - **只管对话区的图**：插件刻意忽略消息列表以外的图片——登录账号的头像和侧栏图标同样是 `<img>`，但一律不动（1.7.2 修复）
 - **结构上安全**：缩略图效果只用 class 和内联样式实现，**绝不移动、删除或重挂任何节点**。早期版本做过 reparent，结果让 DSH 的会话槽抛 `DOMException`、整段对话渲染成空白
 - **自动增强**：MutationObserver 自动增强新加入对话的图片；React 重渲染覆盖 class 后也会自动重新接管
-- **把图带进对话（宿主侧 `display_image` 工具）**：一个工具吃三种输入——本地 `path`（文件**或**目录，TIFF/HEIC 自动转码、可缩放）、网络 `url` 直链、`query` 关键词搜图（花瓣优先，Bing 回退），返回可直接粘贴的 Markdown。本机任意文件可通过 `/images/?abs=<路径>` 原地直读（仅限本机回环），无需先复制进图库目录
+- **把图带进对话（宿主侧 `display_image` 工具）**：一个工具吃三种输入——本地 `path`（文件**或**目录，TIFF/HEIC 自动转码、可缩放）、网络 `url` 直链、`query` 关键词搜图（Bing 优先，花瓣/搜狗次之，**按抽样可加载率选源**），返回可直接粘贴的 Markdown。本机任意文件可通过 `/images/?abs=<路径>` 原地直读（仅限本机回环），无需先复制进图库目录
 - **防盗链自动降级（1.7.2）**：搜图结果可能返回 `200` 却在浏览器里显示不出来——部分 CDN（花瓣走腾讯云 EdgeOne）会拒绝 `Referer` 不是自家域名的请求，图片于是显示成「无法预览」。工具现在会**按浏览器的方式逐张探测**，**只把会被拦的那几张**转存到本地，能直连的保持直连，不浪费带宽
+- **图源健康度门禁（1.8.1）**：过去把「接口有结果」当成「图源可用」——花瓣的搜索 API 一直正常返回 200 + 20 条，但它的图片链接**全部**被腾讯 EdgeOne 拦成 `567`，于是搜出来的 5 张图在对话里全是「图片无法预览」，而且因为第一个源「有结果」就 `return`，永远不会降级到别的源。现在每个图源会**抽 4 张按浏览器的方式真探一次**，可加载率低于 30% 就记下原因并自动换下一个源；所有源都不达标时退回可加载率最高者，并在 note 里如实写明「因图源不可用已换源/可加载率偏低」。图源顺序也回到实测可用者优先（**Bing → 花瓣 → 搜狗**；搜狗接口已对匿名请求回 `forbid`，会明确报「此图源暂不可用」而不是静默当成「没搜到」）
+- **转存改 4 路并发（1.8.1）**：转存是逐张 `await` 的，10 张要等 18.4 秒。现在固定 4 路并发（顺序不错乱、单张失败不影响其他张），并跳过健康度采样时已经探过的图（每张少一次往返）
+- **失败必须说出来（1.8.1）**：转存失败原先被空 `catch (e) {}` 吞掉，用户只看到坏图、日志一片安静。现在失败原因记在 `rescueError` 上，并在 note 里写明「有 N 张被原站点拦截且无法转存」，让「发不出图」这件事至少是**可见**的
+- **自动转存目录不再无限增长（1.8.1）**：`~/.dsh/image-gallery-auto` 原先只写不删（实测已 129 个文件 / 187 MB）。现在每次转存前检查一次：文件数 > 500 或总量 > 512 MB 就从**最旧的**开始清理（单个文件删不掉也不中断整轮）
 - **图片投递铁律（1.7.8）**：插件会在 system prompt 里常驻一条规则（`image-gallery:delivery-law`，order 1500），要求模型**把每张交付的图写进回复正文**（`![](…)` markdown），而不是只放在 `display_image` 的工具调用行里。因为**工具行默认折叠**，用户滚动正文时看不到折叠区内容，会合理认为「根本没发图」。铁律同时禁止「见上文」「已发送 N 张」这类不落图的写法，也禁止把文件路径或普通链接当成图片交付。想关掉：在 profile 的 cordis patch 里给本插件加 `config.injectImageLaw: false`
 
 ### 安装
