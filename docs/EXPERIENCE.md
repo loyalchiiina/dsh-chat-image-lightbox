@@ -135,7 +135,7 @@ pathImages: void 0                                              // 流式期不�
 
 后果：流式期正文里会闪 `![图1][m541` 这类**字面量**（最长 17 字符、0.5~2 秒），settle 后正常出图。**路径本身实测 0 帧泄漏**（引用式定义行 `[m541]: C:/…` 被 `renderBlocks` 的 `.filter(e => e !== null)` 过滤掉）。
 
-不要试图用 CSS/正则去遮：`!`、`![注意] 这里要说明一下`、完整内联图都会被误伤（172 种真实帧里只命中 84 种）。**A 方案（接受现状）是用户拍的板**，理由是 B 方案（改 asar）三条硬阻塞见 §3.6。
+不要试图用 CSS/正则去遮：`!`、`![注意] 这里要说明一下`、完整内联图都会被误伤（172 种真实帧里只命中 84 种）。**A 方案（接受现状）是用户拍的板**，理由是 B 方案（改 asar）三条硬阻塞见 §3.9。
 
 ### 3.3 desktop 端 origin 是 `dsh-app://app`
 
@@ -154,7 +154,75 @@ pathImages: void 0                                              // 流式期不�
 
 界面把工具调用折成一行「⊗ 已调用工具，更新了计划，已写入文件」。**用户滚动正文看不到工具结果里的任何图**。这条不是风气问题，是界面行为 → 只能用铁律强制正文复述（§4）。
 
-### 3.6 改 asar 为什么被否（B 方案）
+### 3.6 `IMAGE_ENVELOPE` 白名单只认 `read_image`（宿主架构级）
+
+宿主源码 `lib/types/client/tool/models/image-card-model.js`（app.asar 内）：
+
+```js
+const IMAGE_ENVELOPE = /^<path>[^\n]*<\/path>\n<type>image<\/type>\n<content>\n[\s\S]*\n<\/content>$/u;
+const IMAGE_MEDIA_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+function imageCardModel(block) {
+  if (!("kind" in block) || block.isError) return null;
+  const call = parsedToolCall(block);
+  if (call?.name !== "read_image") return null;
+  ...
+}
+```
+
+- 只有 `read_image` 的工具结果会被提升成图片卡片；`display_image` 不在白名单，**永远拿不到这条通道**。
+- `extraTexts(content)` 会把非 envelope 的 text 块拼在 gallery 下方；`fullyRendered(content)` 要求每块都合法，否则整条降级成 generic card。
+
+配套：原生工具的 `output.render` **不能**返回图片块。宿主 `assertRenderedContent(value)` 只接受「content block 数组」（实际只能 `{ type: "text", text }`），否则抛错；只有 MCP 桥接的 `createMcpToolDefinition` → `prepareImageProjection` → `attachments.saveImages(decoded)` → `{ type: "image", attachment }` 这条路能产出图片块。原生插件工具走不了。
+
+→ **结论：插件侧无法把图塞进工具结果让界面直接出图。「必须把 markdown 复述进正文」不是偷懒约定，而是宿主架构决定的唯一可行路径。**
+
+### 3.7 `tool.call.images` 是官方图片槽位，只服务 `read_image`
+
+槽位声明（宿主 `packages/client/ui-tool/src/client/contract/slots.ts:44`）：
+
+```
+{ key: "tool.call.images", kind: "single", scope: "session",
+  summary: "Durable images of a settled image-bearing Tool call, rendered through the attachment presentation plugin.",
+  declaredBy: "an entry in 'tool.call.toolview' (client-ui-tool), so it exists while that entry is mounted",
+  occupants: ["client-ui-attachment MessageImages"], replaceRisk: "shadows-shipped-ui" }
+```
+
+官方填充者是 `client-ui-attachment` 的 `MessageImages`（`priority: 100`，同时填 `conversation.chat.user.images` / `conversation.chat.message.images` / `conversation.trajectory.images` / `tool.call.images`）。
+
+官方 `read-image-toolview` 的注册范式（**声明 children 才能拿到槽位**）：
+
+```js
+ctx.slots.register({
+  name: "tool.call.toolview", key: "read_image", locale: CONVERSATION_NS,
+  children: { "tool.call.images": { kind: "single", scope: "session" } }
+}, ReadImageRow);
+```
+
+宿主 README 原文：「内嵌图像预览依赖 UI 组合：工具结果卡片经由浏览器的 `tool.call.images` 槽位渲染图像，由附件呈现插件填充；**未组合该插件的 UI 改为显示结果的信封文本**。」
+
+本插件 `lib/client.js` 的 `DisplayImageRow` 注册为 `{ name: "tool.call.toolview", key: "display_image" }`，**未声明 `children["tool.call.images"]`**。即便声明了也不解决问题——因为 3.6 的白名单只放 `read_image` 进来。声明与否的唯一差别是「能不能借官方附件组件渲染」，改变不了「藏在折叠区里」这个事实。
+
+### 3.8 `ToolRow` + `useDisclosure`：工具行默认折叠的代码坐标
+
+宿主 `lib/types/client/tool/` 的 `ToolRow` 组件：
+
+```js
+const { expanded, toggle: toggleExpand } = useDisclosure();
+const imageBody = image !== void 0 && image !== null && renderSlot !== void 0 && loadImage !== void 0 ? image : null;
+const card = askQuestionBody ?? terminalBody ?? diffBody ?? readBody ?? imageBody ?? searchBody ?? webBody ?? detailsBody;
+const expandable = state !== "preparing" && (inputRaw !== null || outputText !== null || card !== null);
+const open = expanded && expandable;
+```
+
+`function useDisclosure(version = 0) { const [expandedVersion, setExpandedVersion] = react.useState(null); return { expanded: expandedVersion === version, ... } }` → **`expandedVersion` 初值 `null`，默认折叠**。
+
+图片**只在 `open === true` 的 `expandedContent` 分支里渲染**；折叠态 `collapsedContent` 只渲染一行 `summaryText` + ExitCodeBadge + suffix + diffStat。
+
+再往上一层：一轮内的多次工具调用还会被折进 `ProcessGroup`（`var ProcessGroup = class { key; turn; members; nodes = []; ... }`，DOM 属性 `data-step-process` / `data-step-process-body`），`ProcessGroupHeader` 用 `data?.closed === false && policy.liveProcessDetail` 决定是否展开 → **过程组也是默认收起的**。
+
+→ 所以：任何工具的图片，用户都必须手动点开工具行才看得见；`display_image` 的图即使 `DisplayImageRow` 渲染完全正确，也藏在两层折叠里。这就是「必须复述进正文」的最终架构证据。
+
+### 3.9 改 asar 为什么被否（B 方案）
 
 | 阻塞 | 实测依据 |
 |---|---|
@@ -287,7 +355,7 @@ DSH 的会话树归 React 所有。把图片 reparent 进自己创建的容器 �
 
 ### 8.5 现状核对表（2026-10-21 文档↔代码逐条对齐后的修订）
 
-> 本节是"经验与代码一致性"核验的产物：`E:	mplightbox-labaudit-doc-vs-code.mjs` 逐条比对行号/函数名/行为断言。
+> 本节是"经验与代码一致性"核验的产物：`E:\tmp\lightbox-lab\audit-doc-vs-code.mjs` 逐条比对行号/函数名/行为断言。
 > 首次核验 **36 条行号全中，但 2 条行为断言是我写错的**，已按代码事实改写，这里留档。
 
 | 项 | 我原先写的 | 代码事实 |
@@ -346,9 +414,9 @@ merge-base  = e359fa8  →  远端独有 0
 | 备份 | `~\.dsh\backups\dsh-chat-image-lightbox-1.8.0-<ts>\`（zip + git bundle + 散装 + SHA256） |
 | 宿主机理实验室 | `E:\tmp\lightbox-lab\`（`why_before_worked.cjs`、`mix_live.cjs`、`mask_verify.cjs`、`leak_decisive.cjs`） |
 | 效果图（新） | `docs/images/lightbox.png`、`lightbox-swipe.png`、`columns-3col.png`、`columns-4col.png`、`columns-5col.png`、`hide-images.png` |
-| **技能库副本（本文）** | `E:DSHskillsimage-displayeferences图片插件开发经验-1.8.9.md`（整文件复制，2026-10-21 同步；仓内为唯一基准） |
-| **技能库开发日志** | `E:DSHskillsdsh-configeferencesplugin-developmenteferenceslightbox-plugin-dev-log.md` §三十五（1.1.x–1.7.3 的三十四节 + 本次 1.8.9 接续） |
-| 一致性核验脚本 | `E:	mplightbox-labaudit-doc-vs-code.mjs`（文档代码坐标/行为断言 ↔ 源码逐条比对） |
+| **技能库副本（本文）** | `E:\DSHskills\image-display\references\图片插件开发经验-1.8.9.md`（整文件复制，2026-10-21 同步；仓内为唯一基准） |
+| **技能库开发日志** | `E:\DSHskills\dsh-config\references\plugin-development\references\lightbox-plugin-dev-log.md` §三十五（1.1.x–1.7.3 的三十四节 + 本次 1.8.9 接续） |
+| 一致性核验脚本 | `E:\tmp\lightbox-lab\audit-doc-vs-code.mjs`（文档代码坐标/行为断言 ↔ 源码逐条比对） |
 
 ---
 

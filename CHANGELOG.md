@@ -1,3 +1,112 @@
+## 1.9.0
+
+### 症状
+
+插件自身的功能全部正常（灯箱、缩略图网格、隐藏、TIFF/HEIC 转码逐条实测通过），但**换一台机器、换一个人安装后，仍然可能出现「一张图都没看见」**。也就是说：这不是某个功能坏了，而是「图能不能出现在用户眼前」这条链路在宿主侧有三道硬约束，插件无法绕过。
+
+### 宿主侧三层硬约束（本次源码级核实）
+
+| 层 | 源码坐标 | 结论 |
+|---|---|---|
+| 工具行默认折叠 | 宿主 `lib/types/client/tool/` 的 `ToolRow` + `useDisclosure()`（`expandedVersion` 初值 `null`） | 任何工具的正文内容默认收起，用户只看到一行摘要 |
+| 图片卡片白名单 | 宿主 `lib/types/client/tool/models/image-card-model.js`：`if (call?.name !== "read_image") return null;`，`IMAGE_ENVELOPE` 正则 + `IMAGE_MEDIA_TYPES = {png,jpeg,webp,gif}` | 只有 `read_image` 的结果会被提升成图片卡片；`display_image` 永远拿不到这条通道 |
+| 原生工具无法返回图片块 | 宿主 `assertRenderedContent`：`output.render` 只接受 content block 数组（实际只能 `{type:"text"}`）；只有 MCP 桥接的 `prepareImageProjection` + `attachments.saveImages` 能产出 `{type:"image", attachment}` | 插件侧无法把图塞进工具结果让界面直接出图 |
+
+结论一句话：**「必须把 markdown 复述进正文」不是插件的偷懒约定，而是宿主架构决定的唯一可行路径。**
+
+### 官方图片槽位只服务 read_image
+
+`tool.call.images` 是宿主声明的图片槽位（`packages/client/ui-tool/src/client/contract/slots.ts:44`，`kind:"single"`、`scope:"session"`），官方填充者是 `client-ui-attachment` 的 `MessageImages`（priority 100）。官方 `read-image-toolview` 的注册范式是：
+
+```js
+ctx.slots.register({ name: "tool.call.toolview", key: "read_image", locale: CONVERSATION_NS,
+  children: { "tool.call.images": { kind: "single", scope: "session" } } }, ReadImageRow);
+```
+
+宿主 README 原文：「内嵌图像预览依赖 UI 组合：工具结果卡片经由浏览器的 `tool.call.images` 槽位渲染图像，由附件呈现插件填充；未组合该插件的 UI 改为显示结果的信封文本。」
+
+本插件的 `DisplayImageRow` 走 `tool.call.toolview` + `key:"display_image"`，未声明 `children["tool.call.images"]`，因此即使渲染正确也只在折叠区内可见 —— 与上面的架构结论一致。
+
+### 修复：工具行的图片抽取自 1.8.0 起一直是死的（`igImageUrls`）
+
+`lib/client.js` 里 `DisplayImageRow` 靠 `igImageUrls` 从工具结果的 text 块里抽图片地址。这个函数的正则只认**内联式** `![alt](目标)` 且目标必须以 `http(s)://` 或 `/` 开头：
+
+```js
+var re = /!\[[^\]]*\]\(((?:https?:\/\/|\/)[^)\s]+)\)/g;
+```
+
+但 `lib/index.js` 的 `bodyMarkdown()` 从 **1.8.0** 起产出的是**引用式**（为了流式期间不把半截路径刷进对话）：
+
+```
+![图1][ab3]
+
+[ab3]: C:/Users/Administrator/.dsh/image-gallery-auto/a.jpg
+```
+
+`git show` 比对确认：1.7.x 与 1.8.0 的 `igImageUrls` **字节完全相同** —— 改正文格式时漏同步客户端。后果：
+
+- 引用式没有括号 → 正则不匹配；即便内联，`C:/…` 也不以 `/` 或 `http` 开头 → 同样不匹配。
+- 所以 `igImageUrls` 永远返回 `[]`，`DisplayImageRow` 永远走 `urls.length === 0` 的纯文本分支。
+- **工具行展开后只显示 markdown 原文，一张图都不出。**（正文通道不受影响：正文由宿主自己把引用式成对改写成 `api/file?path=…`，不经过这个函数。）
+
+修法：
+
+1. `igImageUrls` 现在同时支持**内联式 / 全文引用式 / 折叠式 `![alt][]` / 简写式 `![alt]`**，通过同文本内的 `[label]: dest` 定义行解析，标签大小写不敏感、首个定义优先（与宿主 `renderImageReference` 的规则一致）。
+2. 新增 `igLocalToRoute()`：本地 Windows 绝对路径改写成 `/images/?abs=<编码>`。**必须改写**——renderer 跑在 `dsh-app://app`，裸 `C:/…` 会被按该 origin 解析，永远加载不出来。`http(s)` / 已根相对 / `data:` / `blob:` 原样透传。
+3. `DisplayImageRow` 改为先把所有 text 块 join 再抽取：引用和它的定义行可能落在不同的 text 块里，分开抽会解析不到。
+4. 结果去重，顺序保持文档顺序。
+
+新增回归探针 `test/probe-toolview-urls.mjs`（20 项断言），已并入 `test/run-all.mjs`：
+
+```
+✓ probe-toolview-urls.mjs    PASS  20/20   工具行图片抽取（引用式/内联式/折叠式/简写式）
+结果：通过 9 / 失败 0 ✅ 全绿
+```
+
+鉴别力已做负控验证：把探针指向修复前的 `client.js`，引用式与「内联式 + Windows 路径」两项立刻变红（2/4 红），说明它真的能抓住这个缺陷，不是摆设。
+
+> 为什么原有 8 个探针 292 项断言全绿也没发现它：它们验的是**宿主侧交付链路**（图源健康/转码/两道闸门/正文副本），没有一个覆盖**客户端抽取函数**。这次把客户端那一半也纳入了回归。
+
+### 安装侧排查（给别人装时按顺序查）
+
+1. **宿主启动日志三条齐全**：`image-gallery: serving from ... (sharp: available)` / `image-gallery: image delivery law registered (order 1500, 826 chars)` / `image-gallery: display_image tool registered`。缺第三条 = `tools` 服务或 `defineTool` 不可用（插件会 `warn: display_image tool skipped`）；缺第二条 = `systemPrompt` 服务不可用（`warn: systemPrompt service unavailable, delivery law skipped`）—— 此时铁律没进 system prompt，模型很可能只在工具行里出图，用户就看不到。
+2. **`sharp: unavailable` 不是「看不到图」的原因**，只影响 TIFF/HEIC（会变成「图片无法预览」）。根因是 junction 安装后 `createRequire(import.meta.url)` 从 `local-plugins/` 向上找不到 `profiles/<name>/node_modules`；插件已用多根解析（模块自身、execPath、EXEPATH、cwd、各祖先 + 遍历 `.dsh/profiles/*`）兜底。
+3. **profile 的 `package.json` 里 `dsh.profile.bundles` 必须含 `dsh-chat-image-lightbox`**，且 `<profile>/node_modules/dsh-chat-image-lightbox` 必须存在（Junction 或实体目录）。只有前者没有后者 = 宿主静默跳过，日志零行。
+4. **客户端 bundle**：`lib/client.js` 必须存在且 `package.json` 的 `exports["./client"]` 指向它；缺失会导致客户端激活失败。改了 `lib/client.js` 之后必须**完全退出进程**再启动（`closeToTray: true` 时点 × 只是收进托盘，进程不退出 = 没重启），`Ctrl+R` 不重载客户端 bundle。
+5. **`dsh.client.inject` 里写错包名是静默无效**（宿主 `arriveGraphRow` 对 `inject` 里查不到的包只是跳过、不报错）；`external` 才会硬失败。所以 inject 写错不会导致「不显示」，别往这个方向排查。
+6. **`browserAccess: false`（默认）时用普通浏览器/curl 直接访问 `/images/?abs=…` 会拿到 403 `Browser access is disabled`** —— 这是**预期行为**，不影响 Electron 桌面端在界面里看图。
+
+### 版本
+
+三处版本区间统一收紧为 `>=0.1.7-0 <0.3.0`：
+
+| 字段 | 原值 | 新值 |
+|---|---|---|
+| `engines.dsh` | `>=0.1.7-rc.1` | `>=0.1.7-0 <0.3.0` |
+| `peerDependencies["@deepseek-ai/dsh"]` | `>=0.1.7-rc.1` | `>=0.1.7-0 <0.3.0` |
+| `devDependencies["@deepseek-ai/dsh"]` | `>=0.1.7-rc.1` | `>=0.1.7-0 <0.3.0` |
+
+`@deepseek-ai/cordis` 保持 `^4.0.2` 不动（本机 vendored 为 4.0.5，落在区间内）。
+
+**下界改成 `-0` 的理由**：`0.1.7-0` 是「零预发布号」写法，比 `0.1.7-rc.1` 覆盖更广——`-rc.1` 会漏掉 `0.1.7-alpha.*` / `0.1.7-beta.*`，而 `-0` 把整个 `0.1.7-*` 预发布谱系都纳入。`0.1.7-rc.1` 恰好是 peer 变运行时门禁的断层版本，写在门禁生效前后都安全。
+
+**上界 `<0.3.0` 的理由**：DSH 插件家族规范要求按世代切上界、禁止开区间（`dsh-plugin-guide` 的 `data/peer-range.json` canonicalRange 就是 `>=0.2.1-0 <0.3.0` 这类写法）。本插件只用 Cordis 基础 + `webServer`/`tools`/`systemPrompt` 三个宿主服务 + 客户端 `slots`，全部在 0.1.x 世代内就有，故 `>=0.1.7-0 <0.3.0` 是准确区间。
+
+**上界的真正价值（为什么这条对「别人安装」最要紧）**：`peerDependencies` 是**运行时门禁**——`app-boot/src/plugin-compatibility.ts` 在插件被 `import` **之前**校验，不匹配的行被直接置为 `disabled`，模块永不导入（门禁语义 `includePrerelease: true`）。不写上界时，将来 0.3.x 出现破坏性变更会让插件「装上、看似正常、但静默失效」，这正是「别人装了看不到图」最隐蔽的形态；写上界后宿主会明确报版本不兼容并禁用，用户立刻知道原因，而不是对着一个不工作的插件猜。
+
+本机实测基线：`@deepseek-ai/dsh` = `0.2.1-rc.2` ✅ 落在区间内；`@deepseek-ai/cordis` = `4.0.5` ✅；桌面壳 FileVersion `2.0.19-next`。
+
+### 元数据清理：移除不存在的 `dsh.client.inject` 条目
+
+`dsh.client.inject` 原为三个包名，其中 `@deepseek-ai/dsh-client-runtime` **在宿主 bundle 里不存在真实 manifest**（`"name": "@deepseek-ai/dsh-client-runtime"` 命中 0 次；另两个 `dsh-client-ui-conversation` / `dsh-client-ui-tool` 各命中 2 次）。已移除该条，现为：
+
+```json
+"dsh": { "client": { "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-tool"], "platform": "web" } }
+```
+
+**这不是故障修复，只是消除噪声**：宿主对 `inject` 里查不到的包只是不排队、不报错（`arriveGraphRow` 的实现），所以写错包名不会导致插件不加载。但留在那里会误导后来排查的人往这个方向查，故清掉。真正会硬失败的是 `external`。
+
+---
 ## 1.8.9
 
 ### 症状

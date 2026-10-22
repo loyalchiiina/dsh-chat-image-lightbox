@@ -31,6 +31,7 @@ const LOCAL = [
   { file: "probe-serve-integrity.mjs", expect: 33, label: "交付内容完整性（真图/伪装图/%文件名）" },
   { file: "probe-viewable-body.mjs", expect: 32, label: "正文指向浏览器可渲染的副本（TIFF/HEIC）" },
   { file: "probe-heic-real.mjs", expect: 24, label: "真 HEVC HEIC 转码（sharp 无解码器，靠 WIC 兜底）" },
+  { file: "probe-toolview-urls.mjs", expect: 20, label: "工具行图片抽取（引用式/内联式/折叠式/简写式）" },
 ];
 
 // ── 第二组：实验室套件（--full 才跑） ───────────────────────────────────────

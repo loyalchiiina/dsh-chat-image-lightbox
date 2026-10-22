@@ -44,8 +44,8 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 ```
 
 > **当前版本 / Current version**：`1.8.9`
-> **适用内核 / Requires**：本包声明 `engines.dsh: ">=0.1.7-rc.1"` 与 `peerDependencies["@deepseek-ai/dsh"]: ">=0.1.7-rc.1"`（不硬绑具体内核版本）；本版实测验证于 **DSH NEXT 2.0.18-next**，客户端组件 `@deepseek-ai/dsh-client-ui-tool` 实测 `0.2.1-alpha.2`。
-> This package declares `engines.dsh: ">=0.1.7-rc.1"` and `peerDependencies["@deepseek-ai/dsh"]: ">=0.1.7-rc.1"` (no hard pin to a specific kernel); this release was verified end to end on **DSH NEXT 2.0.18-next**, with `@deepseek-ai/dsh-client-ui-tool` measured at `0.2.1-alpha.2`.
+> **适用内核 / Requires**：本包声明 `engines.dsh: ">=0.1.7-0 <0.3.0"` 与 `peerDependencies["@deepseek-ai/dsh"]: ">=0.1.7-0 <0.3.0"`（带世代上界，因为 peer 是运行时门禁，不匹配会被宿主直接禁用）；本版实测验证于 **DSH NEXT 2.0.19-next**，客户端组件 `@deepseek-ai/dsh-client-ui-tool` 实测 `0.2.1-rc.2`。
+> This package declares `engines.dsh: ">=0.1.7-0 <0.3.0"` and `peerDependencies["@deepseek-ai/dsh"]: ">=0.1.7-0 <0.3.0"` (bounded by generation, because peers are a runtime gate: a mismatch makes the host disable the plugin outright); this release was verified end to end on **DSH NEXT 2.0.19-next**, with `@deepseek-ai/dsh-client-ui-tool` measured at `0.2.1-rc.2`.
 
 > ⚠️ **升级到 1.7.3 前请注意 / Before upgrading to 1.7.3**
 > 1.7.2 起 **移除了「跳图」功能**（该功能在多次迭代中不够稳定，已整体删除，界面上不再出现 ⌖ 按钮）。
@@ -345,6 +345,35 @@ The trailing `agent-busy` is a generic wrapper the kernel applies to **unclassif
 
 > Note: this only ever affected **sending images**; plain text chat was never impacted.
 
+#### ⑦ Installed the plugin but still see no images? Check these in order
+
+This section is for "plugin just installed, everything looks fine, but when the assistant sends images the message body has none". Go in order — whichever one hits tells you where the problem is.
+
+**1. Check the three host startup log lines** (`~/.dsh/logs/desktop-next.log`):
+
+| Log line | What its absence means |
+|---|---|
+| `image-gallery: serving from ... (sharp: available)` | The plugin is not loaded at all (see item 3) |
+| `image-gallery: image delivery law registered (order 1500, ... chars)` | The `systemPrompt` service is unavailable → the plugin warns `delivery law skipped`. **The delivery law is then not in the system prompt, so the model will likely leave images in the tool row where you cannot see them** |
+| `image-gallery: display_image tool registered` | The `tools` service or `defineTool` is unavailable → the plugin warns `display_image tool skipped`. **There is no tool to call** |
+
+**2. `(sharp: unavailable)` is not the cause of "no images".** It only affects TIFF/HEIC (they render as "image cannot be previewed"); JPG/PNG/WEBP are fine. Root cause: after a junction install, Node resolves from the plugin's real path and cannot find `profiles/<name>/node_modules` (where sharp lives — a sibling branch, not an ancestor). The plugin already resolves against multiple roots as a fallback.
+
+**3. Make sure the plugin is actually mounted — two of the three steps is not enough.**
+   - `<profile>/package.json` lists the package under `dependencies` (for a local install, `"link:<absolute plugin path>"`);
+   - the same file lists the package name in `dsh.profile.bundles`;
+   - `<profile>/node_modules/<package name>` exists (junction or real directory).
+
+   With only the first two, **the host skips the package silently: no warning, no error, the plugin behaves as if it does not exist**. Check with `Test-Path <profile>/node_modules/dsh-chat-image-lightbox`.
+
+**4. After changing client code, fully exit the process before restarting.** With `closeToTray: true`, clicking the window's × only hides it to the system tray — the process keeps running, and host plugins load at boot with no hot reload, so this is not a restart. `Ctrl+R` does not reload client bundles either. Correct way: tray icon → right click → Quit, wait for the process to disappear, then start again.
+
+**5. Do not chase `dsh.client.inject`.** A wrong package name there is **silently ignored** (the host simply does not schedule an `inject` entry it cannot resolve, and reports nothing); only `external` fails hard. So a bad `inject` entry cannot cause "no images".
+
+**6. A 403 `Browser access is disabled` from a plain browser or curl on `/images/?abs=...` is expected.** The desktop app defaults to `browserAccess: false` and only admits requests carrying the Electron renderer token. Viewing images inside the desktop client is unaffected.
+
+> **The most important point**: if everything above is green and all three log lines are present, yet the assistant's message body still has only text — **that is not a plugin fault, it is the model not following the image delivery law**. DSH's host only auto-promotes results of the built-in `read_image` tool (source: `imageCardModel` contains `if (call?.name !== "read_image") return null;`); results from third-party tools always fold into the tool row, and the tool row is **collapsed by default**. So a third-party plugin can only deliver images by **writing the markdown image into the reply body**. That constraint is enforced by the system-prompt section the plugin registers — if that log line is missing, the constraint is not there.
+
 ### Keyboard & Mouse
 
 | Action | Input |
@@ -374,7 +403,7 @@ The trailing `agent-busy` is a generic wrapper the kernel applies to **unclassif
 
 ### Requirements
 
-- **DSH kernel** — the package declares `engines.dsh: ">=0.1.7-rc.1"` (and the same floor in `peerDependencies`), with no hard pin; this release was verified end to end on **DSH NEXT 2.0.18-next**. The client half relies on `@deepseek-ai/dsh-client-ui-tool` being injectable (measured `0.2.1-alpha.2`).
+- **DSH kernel** — the package declares `engines.dsh: ">=0.1.7-0 <0.3.0"` (and the same range in `peerDependencies`). The upper bound is deliberate: `peerDependencies` is a **runtime gate** — the host checks it before importing the plugin and silently disables the row on mismatch, so an open-ended range would let a future breaking generation install "successfully" and then fail quietly. This release was verified end to end on **DSH NEXT 2.0.19-next** (kernel `@deepseek-ai/dsh` `0.2.1-rc.2`). The client half relies on `@deepseek-ai/dsh-client-ui-tool` being injectable (measured `0.2.1-rc.2`).
 - Host must expose the `webServer` service (standard in DSH Desktop).
 - Node.js ≥ 22
 - `sharp` `^0.35.3` (declared as a dependency; it is what performs the lossless TIFF/HEIC transcoding). The range follows the DSH kernel's own `^0.35.3` — an exact pin here would put two different sharp builds into one process and break image sending (see Troubleshooting).
@@ -559,6 +588,35 @@ pnpm add dsh-chat-image-lightbox@latest
 
 > 注：此问题只影响**发图片**，纯文字对话始终正常。
 
+#### ⑦ 装了插件还是看不到图？按这个顺序查（安装侧排查）
+
+这一条专门给「刚装好插件、功能看起来正常、但让 AI 发图时正文里就是没有图」的情况。按顺序查，命中哪条就说明问题在哪：
+
+**1. 先看宿主启动日志里这三条是否齐全**（`~/.dsh/logs/desktop-next.log`）：
+
+| 日志行 | 缺了说明什么 |
+|---|---|
+| `image-gallery: serving from ... (sharp: available)` | 插件没装载（看下面第 3 条） |
+| `image-gallery: image delivery law registered (order 1500, ... chars)` | `systemPrompt` 服务不可用 → 插件会 warn `delivery law skipped`。**这时铁律没进 system prompt，模型很可能只在工具行里出图，你就看不到** |
+| `image-gallery: display_image tool registered` | `tools` 服务或 `defineTool` 不可用 → 插件会 warn `display_image tool skipped`。**这时根本没有工具可调** |
+
+**2. `(sharp: unavailable)` 不是「看不到图」的原因。** 它只影响 TIFF/HEIC（会显示成「图片无法预览」），JPG/PNG/WEBP 照常。根因是 junction 安装后 Node 从插件真实路径向上找不到 `profiles/<name>/node_modules`（sharp 在那里，是兄弟分支不是祖先）；插件已用多根解析兜底。
+
+**3. 确认插件真的挂上了（只做前两件等于没挂）。** 三件事必须同时成立：
+   - `<profile>/package.json` 的 `dependencies` 里有这个包（本地安装写 `"link:<插件绝对路径>"`）；
+   - 同文件 `dsh.profile.bundles` 数组里有包名；
+   - `<profile>/node_modules/<包名>` 存在（Junction 或实体目录）。
+
+   只有前两件、没有第三件时，**宿主会静默跳过，日志里既不 warn 也不 error，插件像不存在**。判别：`Test-Path <profile>/node_modules/dsh-chat-image-lightbox`。
+
+**4. 改了客户端代码必须「完全退出进程」再启动。** `closeToTray: true` 时点窗口右上角 × 只是收进系统托盘，进程并不退出，宿主插件是 boot 装载不热重载 → 等于没重启。`Ctrl+R` 刷新页面也不重载客户端 bundle。正解：托盘图标右键 → 退出，等进程消失后再启动。
+
+**5. 不要往 `dsh.client.inject` 方向排查。** 里面写错包名是**静默无效**的（宿主对 inject 里查不到的包只是不排队，不报错）；只有 `external` 写错才会硬失败。所以 inject 写错不会导致「不显示」。
+
+**6. 用浏览器或 curl 直接访问 `/images/?abs=...` 拿到 403 `Browser access is disabled`，这是预期行为。** 桌面端默认 `browserAccess: false`，只放行带 Electron 渲染器令牌的请求。你在桌面客户端界面里看图不受影响。
+
+> **最重要的一条**：如果以上全绿、日志三条齐全，但 AI 发图时正文里仍然只有文字——那**不是插件故障**，是 AI 没遵守「图片投递铁律」。DSH 宿主只给内置的 `read_image` 工具自动出图（源码里 `imageCardModel` 有 `if (call?.name !== "read_image") return null;` 的白名单），第三方工具的结果一律被折进工具行，而工具行**默认是收起的**。所以第三方插件发图，**只能靠把 markdown 图片写进回复正文**。这条约束由插件注册的 system prompt 段强制执行；若那条日志缺失，约束就不在。
+
 ### 键盘与鼠标
 
 | 操作 | 输入 |
@@ -588,7 +646,7 @@ pnpm add dsh-chat-image-lightbox@latest
 
 ### 环境要求
 
-- **DSH 内核** —— 本包声明 `engines.dsh: ">=0.1.7-rc.1"`（`peerDependencies` 同下限），不硬绑具体内核版本；本版实测验证于 **DSH NEXT 2.0.18-next**。浏览器端依赖 `@deepseek-ai/dsh-client-ui-tool` 可被注入（实测 `0.2.1-alpha.2`）。
+- **DSH 内核** —— 本包声明 `engines.dsh: ">=0.1.7-0 <0.3.0"`（`peerDependencies` 同区间）。上界是刻意的：`peerDependencies` 是**运行时门禁**——宿主在 import 插件**之前**校验，不匹配就直接禁用该行且模块永不导入，所以开区间上界会让将来某个破坏性世代「装上看似正常、然后静默失效」。本版实测验证于 **DSH NEXT 2.0.19-next**（内核 `@deepseek-ai/dsh` `0.2.1-rc.2`）。浏览器端依赖 `@deepseek-ai/dsh-client-ui-tool` 可被注入（实测 `0.2.1-rc.2`）。
 - 宿主需提供 `webServer` 服务（DSH 桌面端标准配置）。
 - Node.js ≥ 22
 - `sharp` `^0.35.3`（已声明为依赖，TIFF/HEIC 的无损转码由它完成）。采用区间跟随 DSH 内核自身的 `^0.35.3`——若在此精确锁版，会让两个不同 sharp 版本共存于同一进程，导致**发图失败**（见「图片显示常见问题排查」）。
