@@ -1,3 +1,60 @@
+## 1.9.3
+
+### 症状
+
+1.9.1 修完「四列 + 文字乱入」后，十张图终于横向成行了（3 列 float 流），但用户又报：
+**「现在右图了但是第一个图片和其他图片不对齐」** —— 截图量化确认：第一行三张卡里，第 1 张卡顶边 y=26，第 2、3 张 y=46，**首图独自高出 20px**；第二行（y=200）三列完全齐平。是首图独有的一次性偏移，不是整行偏移，也不是行高差异。
+
+### 根因
+
+瓦片能成行，靠的是「十个零高 `<p>` + float 跨父级连成一条 float 流」（`markRowClears` 的注释早就记录了实测 DOM：`img → BUTTON.dsh-ig-tile.dsh-ig-tilewrap(float:left) → P(height 0) → DIV._markdown`）。
+
+**但 `<p>` 仍然拥有一个行盒。** 只要那个段落里残留任何**行内幸存者**——零尺寸 span、空的灯箱槽、旧版本遗留的节点、宿主 `LoadedMarkdownImage` 返回 Fragment 时留下的兄弟节点——该段就不再是零高：
+
+- 段落有了高度 → 它自己的行盒占位；
+- 行盒把**它之后**的整条 float 流整体往下推；
+- 于是「行盒之前的那张图」比后面所有图都高出一截。
+
+插件从不给 wrapper 段落归零 margin/padding/line-height，也从不清理段落里的其它行内节点，所以这个偏移一旦出现就永久存在。
+
+### 复现与选型（`D:\Temp\pw-test\replica-v11.html` + `measure-v11.js`，Playwright `channel:'msedge'`）
+
+忠实照抄宿主 asar 里的 markdown CSS（`#md p{margin:16px 0}`、`.imageButton{display:inline-block;vertical-align:middle}`）+ 插件 1.9.1 CSS，`#md` 宽 826px、`--dsh-ig-cols:3`、10 图：
+
+| 场景 | imgTop 实测 | 判定 |
+|---|---|---|
+| 基线（每段只含一个 float button） | 20,20,20 / 138,138,138 / … | 同排齐平 |
+| 首段塞一个 `display:inline-block;width:0;height:0` 的 span | **20 / 57 / 57** …（`#1 pH=21`，`#2` 起 `pH=0`） | **复现首图偏移** |
+| `#md > p:first-of-type{margin-top:0}` | 20/20/20（不变） | 段落 margin 不是成因 |
+| 加 `.dsh-ig-tileline`（margin/padding/border/line-height/font-size/min-height 全归零） | 有幸存者时 4/4/4；无幸存者时仍 20/20/20 | **修复有效且不破坏基线** |
+
+顺带确证：宿主自己就有 `._markdown_1ypvv_5>*:first-child,._markdown_1ypvv_5 p:first-child{margin-top:0!important}`，所以「首段 margin 归零」这条路本来就不通——真正的问题是行盒，不是外边距。
+
+### 修复
+
+`lib/client.js`：
+
+1. 新增 CSS `.dsh-ig-tileline { margin/padding/border/line-height/font-size/min-height: 0 !important; }` —— 只归零**承载瓦片的那个段落**的盒模型与字体度量，让它彻底不拥有行盒。
+2. `tickThumb()` 在「拿到 `dsh-ig-tilewrap`」的同一分支里调用 `markTileLine(host)`。
+3. `untickThumb()` 调用 `unmarkTileLine(host)` 撤销，否则撤图后段落字号还是 0、散文会糊成一团。
+
+**三重门禁（防历史回归，每一道都必要）**：
+
+| 门禁 | 作用 |
+|---|---|
+| `tileLineOwner` = `host.parentElement`，且拒绝 `body`/`documentElement` | 行盒属于段落，不属于 float 自身 |
+| `tileLineIsDirect` 要求 owner 里**恰好 1 个**瓦片子元素，且子树内也只有 1 个 | **绝不碰消息容器**——把它变成 BFC 会把 float 困住，整行塌成一列（这正是 `markRowClears` 注释里记录的历史事故） |
+| `tileLineIsSafe` 有散文即拒绝（与 `tickThumb` 的 `hasText` 同一判据） | 不把带文字的段落字号归零 |
+
+### 回归
+
+新增 `test/probe-tileline.mjs`（23 项，源码断言 + 判定逻辑复刻双验）：CSS 六条归零、调用点顺序、撤销路径、三重门禁、四个 DOM 场景（单图段落通过 / 含散文拒绝 / 消息容器拒绝 / 零尺寸幸存者仍通过）。
+
+`node test/run-all.mjs` → **12/12 全绿**（rowclear 18、gallery-mixed 17、tileline 23、delivery-banner 22、poprole 15、source-health 61、tool-result 39、dep-resolve 24、serve-integrity 33、viewable-body 32、heic-real 24、toolview-urls 20）。
+
+### 生效条件
+
+替换已安装包的 JS 必须**完全退出 DSH 进程再启动**（`Ctrl+R` 不重载 client bundle）。
 ## 1.9.2
 
 ### 症状
