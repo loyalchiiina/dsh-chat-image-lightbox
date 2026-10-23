@@ -259,7 +259,7 @@ const open = expanded && expandable;
 
 ---
 
-## 5. 版本账（1.8.0 → 1.8.9）
+## 5. 版本账（1.8.0 → 1.9.3）
 
 | 版本 | 提交 | 症状 → 根因 → 修法（一句话） |
 |---|---|---|
@@ -273,9 +273,15 @@ const open = expanded && expandable;
 | 1.8.6 | `0468c7d` | 真 HEIC 从没成功过（libheif 无 HEVC 解码器）→ Windows WIC 兜底（`-EncodedCommand`，永不经过命令行解析） |
 | 1.8.7 | `fae2bc8` | 搜图只抽样 4 张就放行（图8 死链 404 XML、图9 307 跨域）→ 交付前逐张下载 + magic 校验；正文编号每次从图1 重数 → `start` 参数 |
 | 1.8.8 | `cc9c6e4` | 搜「喜羊羊」3 张一张给不出（前几条 403）→ 候选池 `want×4`、分批下载凑够就停、403/401/567 换同源 Referer 重试 |
-| 1.8.9 | 本条 | 铁律可被"只写表格"绕过 → 6 条硬约束 + 计数自检；六张效果图换真实截图；新增本文档 |
+| 1.8.9 | `cc9c6e4`+ | 铁律可被"只写表格"绕过 → 6 条硬约束 + 计数自检；六张效果图换真实截图；新增本文档 |
+| 1.9.0 | `91ca42b` | 工具行图片抽取自 1.8.0 起失效（只认内联 `![]()`，正文已是引用式）→ `igImageUrls` 同时吃引用式 + 本地路径改写成 `/images/?abs=` |
+| 1.9.1 | `cd8affa` | 十张图自动变 4 列 + 表格/散文挤进图行 → `isGalleryContainer` 遇非图子节点不拒绝 + `applyGalleries` 被 `touched` 门控 → 混合容器直接 `return false` + gallery 无条件复算 |
+| 1.9.2 | `19bef8d` | 工具调用成功但正文一张图都没有（模型没复述 markdown）→ 铁律离"刚拿到返回值"太远 → `render()` 在返回值**最上方**加投递 banner（带张数 + 收尾自检） |
+| 1.9.3 | `dfa548a` | 十张图成行了但首图比同排高 20px → 承载瓦片的 `<p>` 仍拥有行盒（段落里任何行内幸存者都会撑出 21px 行盒，把它之后的 float 流整体下推）→ `.dsh-ig-tileline` 归零该段盒模型与字体度量 |
 
-**贯穿所有版本的一条规律**：每次"修好了"之后，**下一轮真发图一定还能挖出新 bug**。这不是悲观，是 1.8.0→1.8.9 的实测事实（9 个版本 9 次）。所以验收必须每轮真发图，不许用"上次通过"代替。
+**贯穿所有版本的一条规律**：每次"修好了"之后，**下一轮真发图一定还能挖出新 bug**。这不是悲观，是 1.8.0→1.9.3 的实测事实（13 个版本 13 次）。所以验收必须每轮真发图，不许用"上次通过"代替。
+
+**1.9.x 三连的额外规律（2026-10-23）**：同一条「十张图」连续三轮各暴露一个**互不重叠**的层——①分类层（谁是 gallery）②投递层（模型抄不抄 markdown）③盒模型层（段落行盒）。**每修一层，下一层的症状才会浮出水面**。所以"一次修好"在 UI 布局类 bug 上几乎不成立，必须准备多轮真发图。
 
 ---
 
@@ -330,6 +336,7 @@ DSH 的会话树归 React 所有。把图片 reparent 进自己创建的容器 �
 | **列数设置即默认值** | 工具栏输入框 = 默认值设置器：提交即 `setTileColumns()` → `localStorage[`dshIgTileColumns.default`]`，1–12 夹取，并主动删掉 4 个历史 key | `loadTileColumns` :1488、`setTileColumns` :1498 |
 | **行末收口** | JS 不知道布局在哪换行，于是按**文档序第 N 个** tile 给 wrapper 打 `.dsh-ig-rowend`（`clear:both`），让后续正文另起一行 | `tickThumb` :1653-1670 |
 | **短行补位** | 缺格处插入**隐形 float 占位元素**（`markGridHosts` 创建，`clearGridHosts` 撤销） | `markGridHosts` :1829、`clearGridHosts` :1923 |
+| **段落行盒归零**（1.9.3） | 承载瓦片的 `<p>` 加 `.dsh-ig-tileline`（`margin/padding/border/line-height/font-size/min-height` 全 `0 !important`），让它**不再拥有行盒**；`untickThumb` 时 `unmarkTileLine` 撤销，否则撤图后字号还是 0、散文糊成一团 | CSS `.dsh-ig-tileline`、`markTileLine`/`unmarkTileLine`、调用点 `tickThumb`/`untickThumb` |
 | **隐藏/展开** | `.dsh-ig-hidden-block` 上 `display:none !important`，并且用 `:has(> img)` / `:has(> * > img)` **把外层包裹一起收掉**——这才是"不留空白带"的关键 | CSS :434-444、`setBlockMode` :1393、`blockMode` :1383 |
 | **分组** | `isChatImage`（排除头像/图标）→ `messageContainer` → `groupFor`；同一段连续 DOM 用 `areAdjacent` + `runGroups` 切组 | :1206 / :1264 / :1317 / :1577 / :1589 |
 | **图片身份键** | `srcKey()` = `img.currentSrc || img.src`，**原样作键、不剥 `?w=`**；`?w=` 只在"取原图"时剥掉，用于灯箱 src、下载与 `dataset.dshOrigSrc` | `srcKey` :1374、`stripResizeParam` :911（调用点 :920 / :1101 / :1753） |
@@ -338,7 +345,7 @@ DSH 的会话树归 React 所有。把图片 reparent 进自己创建的容器 �
 | **下载** | 同源图才走"另存为"（跨域会变成新标签页打开）；文件名由 `sanitizeName` 清洗 | `downloadCurrent` :1137、`sanitizeName` :1125 |
 | **复制路径** | `navigator.clipboard` + `textarea` 兜底，成功后 `flashButton` 反馈 | `copyImagePath` :983 |
 
-### 8.3 十条硬教训（每条都对应一次真实故障）
+### 8.3 十二条硬教训（每条都对应一次真实故障）
 
 | # | 教训 | 证据 |
 |---|---|---|
@@ -352,6 +359,8 @@ DSH 的会话树归 React 所有。把图片 reparent 进自己创建的容器 �
 | ⑧ | **列数输入框必须回写真相**：不管用户是打字、回车、失焦还是从存储恢复，都统一 `inp.value = String(TILE_COLUMNS)` | `setTileColumns` :1503-1506 |
 | ⑨ | **样式写行内 `!important` 才能压过宿主**：`<p>` 是宿主渲染的节点，其自身样式可能胜过样式表 | `setInline` 注释 |
 | ⑩ | **旧实现被端到端验证过，就别为"更聪明"换掉**。原插件是把图片 MOVE 进自建 grid 容器（flex/grid 才能真正控制流动），验证通过后被"宿主搜寻法"替换——**缩略图模式正是这样坏掉的** | 源码注释原文 |
+| ⑪ | **"零高段落"不等于"没有行盒"**（1.9.3）。float 瓦片能跨父级连成行，靠的是每个 `<p>` 高度为 0；但 `<p>` 只要**残留任何一个行内幸存者**（零尺寸 span、空灯箱槽、旧版遗留节点、宿主 `LoadedMarkdownImage` 返回 Fragment 留下的兄弟节点），它就会撑出一个约 21px 的行盒，把**它之后**的整条 float 流整体下推 → 「行盒之前那张图」比后面所有图都高一截。修法：给承载瓦片的段落加 `.dsh-ig-tileline` 把盒模型与字体度量全部归零 | 用户「第一个图片和其他图片不对齐」+ 截图量化（首卡 y=26 / 其余 y=46）+ 复现 v11（`scn=A`：`#1 pH=21`，`#2` 起 `pH=0`） |
+| ⑫ | **不能用"段落 margin"解释首图偏移**。宿主自己就有 `._markdown_1ypvv_5>*:first-child,._markdown_1ypvv_5 p:first-child{margin-top:0!important}`，首段上边距本来就是 0；复现页 `p:first-of-type{margin-top:0}` 量测也「位置完全不变」。**外边距只整体平移整排，绝不产生单张偏移** | asar CSS 实证 + replica-v11 `scn=B` |
 
 ### 8.5 现状核对表（2026-10-21 文档↔代码逐条对齐后的修订）
 
@@ -406,7 +415,10 @@ merge-base  = e359fa8  →  远端独有 0
 |---|---|
 | 插件源码 | `C:\Users\Administrator\.dsh\local-plugins\dsh-chat-image-lightbox\`（三处 profile 均为 Junction 指向此） |
 | 已验证基线 | `docs/VERIFIED-BASELINE.md`（10 条已验收功能 + 代码坐标 + 检查清单） |
-| 一键回归 | `node test/run-all.mjs --full`（自带 8 套件 + 实验室 11 套件 = 19，实测 19/19 全绿）/ `IG_TOOL_ONLINE=1 node test/probe-tool-result.mjs`（真搜图过宿主闸门） |
+| 一键回归 | `node test/run-all.mjs --full`（自带 **12** 套件 + 实验室 11 套件 = 23，实测 12/12 + 11/11 全绿）/ `IG_TOOL_ONLINE=1 node test/probe-tool-result.mjs`（真搜图过宿主闸门） |
+| 1.9.x 新增探针 | `test/probe-gallery-mixed.mjs`（17，混合图文不进九宫格）、`test/probe-delivery-banner.mjs`（22，工具结果自带投递提醒）、`test/probe-tileline.mjs`（23，段落行盒归零 / 首图对齐） |
+| 布局复现环境 | `D:\Temp\pw-test\`（`replica-v3.html` … `replica-v13.html` + `measure-v*.js`；Playwright 必须 `channel:'msedge'`，默认 chromium 二进制未安装） |
+| 截图定量脚本 | `D:\Temp\pw-test\an5.py` … `an12.py`（PIL+numpy 按列/按行统计卡片背景 `rgba(0,0,0,0.06)` 的纵向 run，直接读出各列卡顶边 y）；`extract_md_css.py`（从 app.asar 抽 `_markdown_1ypvv_5` 全量 CSS） |
 | 真 HEVC 样本 | `test/fixtures/real-hevc.heic`（首条断言：不是错标 JPEG） |
 | 全格式素材 | `E:\tmp\lightbox-lab\formats-188\`（固定素材 10 类×2）、`formats-rand\`（随机图源 10 类×2） |
 | 素材生成器 | `E:\tmp\lightbox-lab\build-formats-188.mjs`、`build-formats-rand.mjs`（sharp 经 `createRequire(profiles/desktop/node_modules/noop.js)` 解析） |
@@ -422,7 +434,7 @@ merge-base  = e359fa8  →  远端独有 0
 
 ## 11. 下一次接手的 checklist
 
-1. 先跑 `node test/run-all.mjs --full`，确认 19 套件全绿（不是就先用 `git reset --hard` 回基线）。
+1. 先跑 `node test/run-all.mjs --full`，确认套件全绿（不是就先用 `git reset --hard` 回基线）。
 2. **发一张真图到正文**，让用户确认能看见——这一步不能跳（§2.1）。
 3. 确认宿主加载的是你改的代码：进程启动时间 > 源码 mtime，且日志里 `delivery law (N chars)` 与源码 `IMAGE_LAW_TEXT.length` 对得上。
 4. 动代码前读 `docs/VERIFIED-BASELINE.md` 的受保护坐标（`tickThumb` **布局定位**只能用 `parentElement`，不能用 `closest()` 去爬容器——`closest()` 会把会话头像浮动到角落并缩小，真实事故；祖先类型判定用 `closest()` 是合法的，见 EXPERIENCE §8.5）。
@@ -430,3 +442,27 @@ merge-base  = e359fa8  →  远端独有 0
 6. 改完做负控实验，证明探针有鉴别力。
 7. 报告里带实测数字与绝对路径；失败就说失败。
 8. `git push` / `npm publish` 等用户单独授权，且两端同版本同内容。
+
+### 11.1 布局类 bug 的标准取证链（1.9.1→1.9.3 实战定型）
+
+**不要再花时间去开 devtools**——DSH 桌面端聊天页的 DOM 是取不到的（见下「取证铁律」）。按这个顺序取证：
+
+| 步 | 做什么 | 为什么 / 用什么 |
+|---|---|---|
+| ① | **用户截图定量**：把截图当数据算，不靠眼看 | `E:\Python311\python.exe` + PIL/numpy（系统 `python` 是 WindowsApps 占位不可用）。瓦片背景是 `rgba(0,0,0,0.06)` over 白 ≈ 233..248 灰，按列统计纵向 run 就能得到「第 N 列卡顶边 y / 卡高 / 卡宽」，20px 的偏移直接读出来 |
+| ② | **从宿主 asar 抽真实 CSS**，不猜 | `C:\Users\Administrator\AppData\Local\Programs\DSH NEXT\resources\app.asar`（180923876 B）当 utf8 字符串 grep `_markdown_1ypvv_5`，得到 `p{margin:16px 0}`、`p:first-child{margin-top:0!important}`、`.imageButton{display:inline-block;vertical-align:middle}` 等全部真实规则 |
+| ③ | **建本地复现页**（`D:\Temp\pw-test\replica-v*.html`），逐条照抄 ② + 插件 CSS，用查询参数切换假设 | Playwright 必须 `require('C:/Users/Administrator/AppData/Roaming/npm/node_modules/playwright')` + `chromium.launch({channel:'msedge',headless:true})`——**默认 chromium 二进制没装，只能走 msedge 通道** |
+| ④ | **一个假设一版页面 + 量 `getBoundingClientRect`**，被量测推翻就立刻换下一个假设 | v3→v11 共 9 版：margin 归零、塞 `\n` 文本节点、祖先 BFC、`p:first-of-type`、零尺寸 span…… 前 8 版全部「位置不变」，第 9 版（首段塞零尺寸 inline-block）才复现出 20px 偏移 → **唯一能造出首图偏移的机制是「首段有行盒」** |
+| ⑤ | **在复现页上先验证修复候选再改生产代码** | `fix=1` 在复现页里把 `scn=A` 从 `20/57/57` 恢复成 `4/4/4`、`scn=C` 基线仍 `20/20/20`，才动手改 `client.js` |
+
+**取证铁律（都实测撞过墙，别再试）**：
+- DSH Web GUI `127.0.0.1:56958` 对普通浏览器**默认 403 + 纯文本 `Browser access is disabled`**。闸门在 asar 的 `NextWebServer.permits()` → `decideDesktopBrowserAccess()`；放行需要 Electron renderer 的 `NATIVE_ACCESS_HEADER`（32 字节 base64url 随机 token，只在内存），或用户在设置里开「允许浏览器访问」。→ Playwright 直开只能拿到那行字。
+- GUI 主进程（如 pid 73036）**不监听任何 TCP 端口**（没有 `--remote-debugging-port`）→ CDP 不可达；host 进程（pid 50568）的 `9230` inspector 是 **Node realm**（`ELECTRON_RUN_AS_NODE=1`，无 `document`/`require`/`electron`）。
+- `cua_driver_native__page(execute_javascript)` 被拒（legacy mutation 需 unrestricted 模式 + 启动期风险承诺）。
+- 插件自身**没有任何 first-child / first-of-type 规则**（grep 0 命中）→ 首图偏移不可能是插件选择器写错，只能是「首图 DOM 上下文与其余不同」或宿主行为。
+
+### 11.2 诊断通道（不依赖 devtools）
+
+- `IG_DEBUG = false`（`lib/client.js:37`）→ `igDiag` 全部静默，`~/.dsh/image-gallery-diag.log` 不会新增。要拿真诊断行必须临时改 `true` 再**完全退出重启**。
+- **现成读数通道**：`syncSwitchState()` 把 `［构建=… 状态=… 列数=… 补=N(tileN需M父P) 网格=… 块数=… 块内图=… 已增强图=… 页内img=… 首块容器=… 末扫=… 点按钮次数=…］` 写进两个开关按钮的 `title` —— 鼠标悬停就能读，无需任何工具。
+- 改动生效判定：**进程启动时间 > 源码 mtime**（`Get-Process` 的 `StartTime` vs `Get-Item` 的 `LastWriteTime`）。`Ctrl+R` 不重载 client bundle，`closeToTray` 下点 × 只是隐藏。
