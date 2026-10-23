@@ -1,3 +1,42 @@
+## 1.9.1
+
+### 症状
+
+用户实测报告：**一次连发十张图之后，图片自己排成了四列，而且表格/文字挤进了图片行之间**；手动点一下缩略图开关反而恢复正常。截图实锤：4 张图排成一行，右侧「#/文件/内容」表格被压在图片行中间的空隙里。
+
+### 根因（两条叠加）
+
+| # | 位置 | 问题 |
+|---|---|---|
+| ① | `isGalleryContainer()`（`lib/client.js`） | 判定「这条消息该不该套九宫格」时，遇到散文段落、表格、标题等**非图片子节点只是 `continue` 掉、不拒绝**。于是一条「10 张图 + 9 段散文」的消息容器，只要图片数 ≥ 2 就被判成九宫格，**整条消息行被套上 `display:grid`**。 |
+| ② | `.dsh-ig-gallery` CSS | `grid-template-columns: repeat(auto-fill, minmax(180px, 1fr))`。容器宽 826px 时 `floor((826+8)/188) = 4`，**正好四列**——这就是「自动变四列」的算术来源。 |
+| ③ | `applyGalleries()` 调用点 | 被 `if (touched) applyGalleries();` 门控（只有本轮扫到新图才复算）。流式输出时图片先到、表格后到：九宫格类在「只有图」那一刻就落上了，**后到的表格永远拿不到横跨整行的 `dsh-ig-span`**，只能作为普通 grid item 被塞进 180px 轨道——这就是「文字乱入」。 |
+
+**为什么手动点缩略图就正常**：缩略图开关走的是 `toggleAllBlocks("thumb")` → `tickThumb` + `markGridHosts` + `markRowClears` 的 **float 方案**，与 `dsh-ig-gallery` 的 grid 方案是两套完全独立的实现，且 `applyBlockMode()` 会主动摘掉相关 class。所以一键就回到正常布局。
+
+**为什么 1.7.2 说修过却又出现**：1.7.2 修的是 `.dsh-ig-thumbs` 那条路（整行套网格把散文/表格排进轨道），`dsh-ig-gallery` 这条遗留老路一直没动——同一个病，两扇门。
+
+### 修复（两处，共 +20/-1 行）
+
+1. **`isGalleryContainer()` 遇到任何非图片子节点直接 `return false`**：混合图文的消息容器永远不再进网格。纯图片容器（≥2 图，可含 `<br>`）行为不变。
+2. **`applyGalleries()` 移出 `touched` 门禁**：每次 `enhance()` 都无条件复算，流式后到的散文/表格也能被正确标记（或把不该有的 gallery 类摘掉）。
+
+### 回归
+
+新增 `test/probe-gallery-mixed.mjs`（17 项，源码断言 + DOM 桩逻辑复刻双验）：
+- 10 图 + 9 文 → 不判九宫格；4 图 + 表格 → 不判九宫格；文在图前 → 不判；
+- 纯 4 图 / 图+BR+图 → 仍判九宫格（能力没被修没）；
+- 单图、单图+文、空容器、body → 均不判；
+- `applyGalleries` 不再被 `touched` 门控。
+
+`node test/run-all.mjs` → **10/10 全绿**。
+
+### 生效条件
+
+client 端 JS 必须**完全退出 DSH 进程再启动**（`Ctrl+R` 不重载 client bundle）。
+
+---
+
 ## 1.9.0
 
 ### 症状
