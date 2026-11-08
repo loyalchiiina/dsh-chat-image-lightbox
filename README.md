@@ -1,5 +1,10 @@
 # DSH Chat Image Lightbox 🖼
 
+> **功能描述**：把对话里的图片展开成正文内的缩略图网格（3/4/5 列可选），多张图一眼看清，不再折叠成一个图标，并可一键隐藏。点开灯箱可滚轮或按钮放大、拖动平移、左右切换、下载原图。适配 DSH 内核 0.2.2-rc.1。
+>
+> **English**: Shows chat images as a thumbnail grid inside the message body instead of one collapsed icon, so several pictures are readable at a glance, with 3, 4 or 5 column layouts and a hide-images switch. Clicking a thumbnail opens a lightbox that zooms by wheel or buttons, drags to pan, pages between images and downloads the original. Adapts DSH kernel 0.2.2-rc.1.
+
+
 > ### 🛡 v1.8.9 — 工具行折叠 ≠ 已发送：铁律升级为「必须复述 + 计数自检」 / Collapsed tool row ≠ delivered
 >
 > **实测事故（2026-10-21）**：插件 20 张图（10 种格式）全部交付成功，但模型把图全留在 `display_image` 的工具结果里，
