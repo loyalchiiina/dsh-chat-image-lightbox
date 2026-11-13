@@ -61,7 +61,7 @@ function check(label, got, want) {
   console.log((ok ? "✓" : "✗") + " " + label + (ok ? "" : "\n    期望 " + JSON.stringify(want) + "\n    实得 " + JSON.stringify(got)));
 }
 
-const ABS = "C:/Users/Administrator/.dsh/image-gallery-auto/a.jpg";
+const ABS = "C:/Users/<user>/.dsh/image-gallery-auto/a.jpg";
 const ABS_ROUTE = "/images/?abs=" + encodeURIComponent(ABS);
 
 // ── 1. 引用式：工具真实输出形态（1.8.0 起的发货形态，必须能抽到） ──────────

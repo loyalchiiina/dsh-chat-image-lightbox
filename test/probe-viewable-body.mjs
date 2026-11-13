@@ -18,7 +18,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
-const SRC = process.env.IG_SRC || "C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
+const SRC = process.env.IG_SRC || "C:/Users/<user>/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
 const src = fs.readFileSync(SRC, "utf8");
 
 const checks = [];
@@ -68,7 +68,7 @@ fs.mkdirSync(tmpDir, { recursive: true });
 const reqS = createRequire(path.join(process.env.EXEPATH || process.execPath, "noop.js"));
 let sharp = null;
 try { sharp = reqS("sharp"); } catch (e) {
-  try { sharp = createRequire("C:/Users/Administrator/.dsh/profiles/desktop/noop.js")("sharp"); } catch (e2) {}
+  try { sharp = createRequire("C:/Users/<user>/.dsh/profiles/desktop/noop.js")("sharp"); } catch (e2) {}
 }
 chk("拿到 sharp（转码能力是这条修复的前提）", !!sharp);
 

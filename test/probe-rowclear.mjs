@@ -1,6 +1,6 @@
 // 严格 DOM 桩 v3：复刻「按段切分」的新逻辑，验证多段图区
 import fs from "node:fs";
-const SRC = "C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox/lib/client.js";
+const SRC = "C:/Users/<user>/.dsh/local-plugins/dsh-chat-image-lightbox/lib/client.js";
 const src = fs.readFileSync(SRC, "utf8");
 
 const checks = [];

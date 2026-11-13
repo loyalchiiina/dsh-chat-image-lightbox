@@ -413,16 +413,16 @@ merge-base  = e359fa8  →  远端独有 0
 
 | 资产 | 路径 |
 |---|---|
-| 插件源码 | `C:\Users\Administrator\.dsh\local-plugins\dsh-chat-image-lightbox\`（三处 profile 均为 Junction 指向此） |
+| 插件源码 | `%USERPROFILE%\.dsh\local-plugins\dsh-chat-image-lightbox\`（三处 profile 均为 Junction 指向此） |
 | 已验证基线 | `docs/VERIFIED-BASELINE.md`（10 条已验收功能 + 代码坐标 + 检查清单） |
 | 一键回归 | `node test/run-all.mjs --full`（自带 **12** 套件 + 实验室 11 套件 = 23，实测 12/12 + 11/11 全绿）/ `IG_TOOL_ONLINE=1 node test/probe-tool-result.mjs`（真搜图过宿主闸门） |
 | 1.9.x 新增探针 | `test/probe-gallery-mixed.mjs`（17，混合图文不进九宫格）、`test/probe-delivery-banner.mjs`（22，工具结果自带投递提醒）、`test/probe-tileline.mjs`（23，段落行盒归零 / 首图对齐） |
-| 布局复现环境 | `D:\Temp\pw-test\`（`replica-v3.html` … `replica-v13.html` + `measure-v*.js`；Playwright 必须 `channel:'msedge'`，默认 chromium 二进制未安装） |
-| 截图定量脚本 | `D:\Temp\pw-test\an5.py` … `an12.py`（PIL+numpy 按列/按行统计卡片背景 `rgba(0,0,0,0.06)` 的纵向 run，直接读出各列卡顶边 y）；`extract_md_css.py`（从 app.asar 抽 `_markdown_1ypvv_5` 全量 CSS） |
+| 布局复现环境 | `%TEMP%\pw-test\`（`replica-v3.html` … `replica-v13.html` + `measure-v*.js`；Playwright 必须 `channel:'msedge'`，默认 chromium 二进制未安装） |
+| 截图定量脚本 | `%TEMP%\pw-test\an5.py` … `an12.py`（PIL+numpy 按列/按行统计卡片背景 `rgba(0,0,0,0.06)` 的纵向 run，直接读出各列卡顶边 y）；`extract_md_css.py`（从 app.asar 抽 `_markdown_1ypvv_5` 全量 CSS） |
 | 真 HEVC 样本 | `test/fixtures/real-hevc.heic`（首条断言：不是错标 JPEG） |
 | 全格式素材 | `E:\tmp\lightbox-lab\formats-188\`（固定素材 10 类×2）、`formats-rand\`（随机图源 10 类×2） |
 | 素材生成器 | `E:\tmp\lightbox-lab\build-formats-188.mjs`、`build-formats-rand.mjs`（sharp 经 `createRequire(profiles/desktop/node_modules/noop.js)` 解析） |
-| 转码副本 | `C:\Users\Administrator\.dsh\image-gallery-auto\`（`*-view-*.png|webp`；超过 500 文件或 512 MB 自动从旧删） |
+| 转码副本 | `%USERPROFILE%\.dsh\image-gallery-auto\`（`*-view-*.png|webp`；超过 500 文件或 512 MB 自动从旧删） |
 | 备份 | `~\.dsh\backups\dsh-chat-image-lightbox-1.8.0-<ts>\`（zip + git bundle + 散装 + SHA256） |
 | 宿主机理实验室 | `E:\tmp\lightbox-lab\`（`why_before_worked.cjs`、`mix_live.cjs`、`mask_verify.cjs`、`leak_decisive.cjs`） |
 | 效果图（新） | `docs/images/lightbox.png`、`lightbox-swipe.png`、`columns-3col.png`、`columns-4col.png`、`columns-5col.png`、`hide-images.png` |
@@ -450,8 +450,8 @@ merge-base  = e359fa8  →  远端独有 0
 | 步 | 做什么 | 为什么 / 用什么 |
 |---|---|---|
 | ① | **用户截图定量**：把截图当数据算，不靠眼看 | `E:\Python311\python.exe` + PIL/numpy（系统 `python` 是 WindowsApps 占位不可用）。瓦片背景是 `rgba(0,0,0,0.06)` over 白 ≈ 233..248 灰，按列统计纵向 run 就能得到「第 N 列卡顶边 y / 卡高 / 卡宽」，20px 的偏移直接读出来 |
-| ② | **从宿主 asar 抽真实 CSS**，不猜 | `C:\Users\Administrator\AppData\Local\Programs\DSH NEXT\resources\app.asar`（180923876 B）当 utf8 字符串 grep `_markdown_1ypvv_5`，得到 `p{margin:16px 0}`、`p:first-child{margin-top:0!important}`、`.imageButton{display:inline-block;vertical-align:middle}` 等全部真实规则 |
-| ③ | **建本地复现页**（`D:\Temp\pw-test\replica-v*.html`），逐条照抄 ② + 插件 CSS，用查询参数切换假设 | Playwright 必须 `require('C:/Users/Administrator/AppData/Roaming/npm/node_modules/playwright')` + `chromium.launch({channel:'msedge',headless:true})`——**默认 chromium 二进制没装，只能走 msedge 通道** |
+| ② | **从宿主 asar 抽真实 CSS**，不猜 | `%USERPROFILE%\AppData\Local\Programs\DSH NEXT\resources\app.asar`（180923876 B）当 utf8 字符串 grep `_markdown_1ypvv_5`，得到 `p{margin:16px 0}`、`p:first-child{margin-top:0!important}`、`.imageButton{display:inline-block;vertical-align:middle}` 等全部真实规则 |
+| ③ | **建本地复现页**（`%TEMP%\pw-test\replica-v*.html`），逐条照抄 ② + 插件 CSS，用查询参数切换假设 | Playwright 必须 `require('%USERPROFILE%/AppData/Roaming/npm/node_modules/playwright')` + `chromium.launch({channel:'msedge',headless:true})`——**默认 chromium 二进制没装，只能走 msedge 通道** |
 | ④ | **一个假设一版页面 + 量 `getBoundingClientRect`**，被量测推翻就立刻换下一个假设 | v3→v11 共 9 版：margin 归零、塞 `\n` 文本节点、祖先 BFC、`p:first-of-type`、零尺寸 span…… 前 8 版全部「位置不变」，第 9 版（首段塞零尺寸 inline-block）才复现出 20px 偏移 → **唯一能造出首图偏移的机制是「首段有行盒」** |
 | ⑤ | **在复现页上先验证修复候选再改生产代码** | `fix=1` 在复现页里把 `scn=A` 从 `20/57/57` 恢复成 `4/4/4`、`scn=C` 基线仍 `20/20/20`，才动手改 `client.js` |
 

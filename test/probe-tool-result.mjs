@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const SRC = process.env.IG_SRC || "C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
+const SRC = process.env.IG_SRC || "C:/Users/<user>/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
 const src = fs.readFileSync(SRC, "utf8");
 const ONLINE = process.env.IG_TOOL_ONLINE === "1";
 

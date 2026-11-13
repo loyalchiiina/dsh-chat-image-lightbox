@@ -14,7 +14,7 @@
 //   LB_SRC=<某文件> node probe-poprole.mjs     # 测指定源码（用于鉴别力自证）
 import { readFileSync } from "node:fs";
 
-const SRC = process.env.LB_SRC || "C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox/lib/client.js";
+const SRC = process.env.LB_SRC || "C:/Users/<user>/.dsh/local-plugins/dsh-chat-image-lightbox/lib/client.js";
 const bundle = readFileSync(SRC, "utf8");
 
 let pass = 0, fail = 0;

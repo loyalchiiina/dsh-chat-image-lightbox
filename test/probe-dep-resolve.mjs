@@ -24,7 +24,7 @@ import http from "node:http";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 
-const SRC = process.env.IG_SRC || "C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
+const SRC = process.env.IG_SRC || "C:/Users/<user>/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
 const src = fs.readFileSync(SRC, "utf8");
 
 const checks = [];
@@ -133,7 +133,7 @@ let tiffPath = null;
   const reqS = createRequire(path.join(process.env.EXEPATH || process.execPath, "noop.js"));
   let sharpP = null;
   try { sharpP = reqS("sharp"); } catch (e) {
-    try { sharpP = createRequire("C:/Users/Administrator/.dsh/profiles/desktop/noop.js")("sharp"); } catch (e2) {}
+    try { sharpP = createRequire("C:/Users/<user>/.dsh/profiles/desktop/noop.js")("sharp"); } catch (e2) {}
   }
   if (sharpP) {
     tiffPath = path.join(tmpDir, "probe.tiff");

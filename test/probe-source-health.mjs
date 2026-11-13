@@ -7,7 +7,7 @@ import fs from "node:fs";
 
 // SRC 可用环境变量覆盖：对旧版源码跑同一套断言，是证明"探针有鉴别力"的唯一办法
 // （永远只对当前代码跑，探针全绿也可能是因为它什么都没查）。
-const SRC = process.env.IG_SRC || "C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
+const SRC = process.env.IG_SRC || "C:/Users/<user>/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
 const src = fs.readFileSync(SRC, "utf8");
 
 const checks = [];

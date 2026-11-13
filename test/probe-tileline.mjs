@@ -12,7 +12,7 @@
 // 本探针用「源码断言 + 判定逻辑复刻」双重验证，任一环回退即 FAIL。
 import fs from "node:fs";
 
-const SRC = "C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox/lib/client.js";
+const SRC = "C:/Users/<user>/.dsh/local-plugins/dsh-chat-image-lightbox/lib/client.js";
 const src = fs.readFileSync(SRC, "utf8");
 
 const checks = [];

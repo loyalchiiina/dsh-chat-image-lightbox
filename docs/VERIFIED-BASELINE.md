@@ -261,7 +261,7 @@ node test/run-all.mjs --full       # 上面 8 个 + 实验室 11 套件 = 19 套
 | npm registry | 1.7.9 | — | 1.7.10 / 1.7.11 / 1.8.0 / 1.8.1 / 1.8.2 / 1.8.3 / 1.8.4 / 1.8.5 / 1.8.6 / 1.8.7 / 1.8.8 都**尚未发布**（发布需用户当次授权） |
 
 > ✅ **2026-10-21 起，三处副本不再是「三份拷贝」而是「同一个源」**：三个 profile 的 `dependencies` 都写成
-> `link:C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox`，`node_modules` 下是 Junction。
+> `link:%USERPROFILE%/.dsh/local-plugins/dsh-chat-image-lightbox`，`node_modules` 下是 Junction。
 > 这样既天然一致，也**不会再出现「重启按声明回退到旧版」**（`link:` 形态不参与版本号比对）。
 > 改造前的两份旧副本已备份在 `~\.dsh\backups\lightbox-1.8.1-sync-*`。
 
@@ -272,7 +272,7 @@ node test/run-all.mjs --full       # 上面 8 个 + 实验室 11 套件 = 19 套
 ### 备份位置
 
 ```
-C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-<时间戳>\
+%USERPROFILE%\.dsh\backups\dsh-chat-image-lightbox-1.8.0-<时间戳>\
   source-1.8.0-5c4433c.zip       完整源码（git archive）
   repo-1.8.0-all-branches.bundle 完整 git 历史（含所有分支/tag）
   files\                         5 个关键文件散装副本
@@ -285,15 +285,15 @@ C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-<时间戳>\
 
 ```bash
 # 1) 从 git 直接回退（最快，需 .git 完好）
-cd C:\Users\Administrator\.dsh\local-plugins\dsh-chat-image-lightbox
+cd %USERPROFILE%\.dsh\local-plugins\dsh-chat-image-lightbox
 git reset --hard v1.8.0-verified
 
 # 2) 从 bundle 重建（.git 损坏时）
-git clone C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\repo-1.8.0-all-branches.bundle restored
+git clone %USERPROFILE%\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\repo-1.8.0-all-branches.bundle restored
 cd restored && git checkout v1.8.0-verified
 
 # 3) 从 zip 解压（最兜底）
-unzip C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source-1.8.0-5c4433c.zip -d <目标目录>
+unzip %USERPROFILE%\.dsh\backups\dsh-chat-image-lightbox-1.8.0-*\source-1.8.0-5c4433c.zip -d <目标目录>
 ```
 
 ---

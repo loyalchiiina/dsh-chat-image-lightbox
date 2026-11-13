@@ -7,7 +7,7 @@
 // 结论：规则离「刚拿到返回值」那一刻太远。修法 = 让工具返回值本身喊话。
 // 本探针断言 banner 存在、顺序正确、不破坏原 markdown、且旧行为不会回归。
 import fs from "node:fs";
-const SRC = "C:/Users/Administrator/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
+const SRC = "C:/Users/<user>/.dsh/local-plugins/dsh-chat-image-lightbox/lib/index.js";
 const src = fs.readFileSync(SRC, "utf8");
 
 const checks = [];

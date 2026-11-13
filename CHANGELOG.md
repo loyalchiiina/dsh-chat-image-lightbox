@@ -1,3 +1,10 @@
+## 1.9.4
+
+### 新增
+- 看图工具栏新增 **⟳ 检查更新**：查 npm 最新版，四态可见（检查中 `…` / 有新版本 `↑` 变红 / 已是最新 `✓` / 检查失败提示网络或代理），装完需彻底退出 DSH 再启动。
+### 说明
+- 此前本插件没有任何自查更新入口（`lib/*.js` 里更新相关关键词全 0 命中），不是版本没传上去。
+
 ## 1.9.3
 
 ### 症状
@@ -187,7 +194,7 @@ var re = /!\[[^\]]*\]\(((?:https?:\/\/|\/)[^)\s]+)\)/g;
 ```
 ![图1][ab3]
 
-[ab3]: C:/Users/Administrator/.dsh/image-gallery-auto/a.jpg
+[ab3]: C:/Users/<user>/.dsh/image-gallery-auto/a.jpg
 ```
 
 `git show` 比对确认：1.7.x 与 1.8.0 的 `igImageUrls` **字节完全相同** —— 改正文格式时漏同步客户端。后果：
@@ -292,7 +299,7 @@ var re = /!\[[^\]]*\]\(((?:https?:\/\/|\/)[^)\s]+)\)/g;
 | ICO | 原 `.ico` 直读（256/192 内嵌 PNG） | 出图 |
 | TIFF / HEIC | 插件转 PNG 副本进正文 | 出图 |
 
-素材：`E:\tmp\lightbox-lab\formats-rand\`（随机图源池 315 张打乱后取用，扩展名与真实 magic 20/20 一致）；生成脚本 `build-formats-rand.mjs`；转码副本落 `C:\Users\Administrator\.dsh\image-gallery-auto\`。BMP 1.8 MB / 2.3 MB 也正常，AVIF 与 ICO 无需兜底。
+素材：`<local-temp>\lightbox-lab\formats-rand\`（随机图源池 315 张打乱后取用，扩展名与真实 magic 20/20 一致）；生成脚本 `build-formats-rand.mjs`；转码副本落 `C:\Users\<user>\.dsh\image-gallery-auto\`。BMP 1.8 MB / 2.3 MB 也正常，AVIF 与 ICO 无需兜底。
 
 ### 文档
 
@@ -601,7 +608,7 @@ Chromium 没有 TIFF 解码器 → 加载失败 → 正文「图片无法预览�
 **根因**：这张 TIFF 不是特例，**所有 TIFF/HEIC 都显示不出来**。启动日志早就写了答案：
 
 ```
-image-gallery: serving from C:\Users\Administrator\.dsh\uploads (sharp: unavailable)
+image-gallery: serving from C:\Users\<user>\.dsh\uploads (sharp: unavailable)
 ```
 
 `sharp` 是把 TIFF/HEIC 转成浏览器能画的格式的唯一手段。它不可用，这两种格式就只能以
@@ -706,7 +713,7 @@ query「蔡秀彬」 5817ms  采用 Bing  返回 5 张  health {ok:4, sampled:4,
 这条是**验收时真发图**才发现的，脚本永远看不见：
 
 ```
-C:\Users\Administrator\.dsh\image-gallery-auto\image-4-go3m.jpg   14455B
+C:\Users\<user>\.dsh\image-gallery-auto\image-4-go3m.jpg   14455B
 前 16 字节:  0a 0a 0a 0a 0a 0a 0a 3c 21 64 6f 63 74 79 70 65
              → "\n\n\n\n\n\n\n<!doctype"
 ```
@@ -753,7 +760,7 @@ GIF `GIF8`、WEBP `RIFF….WEBP`、TIFF `II*\0` / `MM\0*`、BMP `BM`、ISOBMFF `
 ### 验收方式：真发图，不只看脚本数字
 
 这一版的三条问题里有两条是**只有真发图才能看见**的（TIFF 显示失败、缓存里躺着 HTML）。
-所以验收改成把每种图**真发进对话正文**，并另配一个端到端脚本 `E:\tmp\lightbox-lab\verify-all-forms.mjs`，
+所以验收改成把每种图**真发进对话正文**，并另配一个端到端脚本 `<local-temp>\lightbox-lab\verify-all-forms.mjs`，
 用插件自己的 handler 逐格式核对浏览器实际会收到的 `content-type` 与 magic bytes：
 
 | 形态 | 结果 |
@@ -1054,7 +1061,7 @@ node test/run-all.mjs --full   # 再加实验室 11 套件
 - 退出码 0/1，可直接接 CI。
 - 实测：`--full` → **13 套件全绿，0 失败**。
 
-**完整备份**（`C:\Users\Administrator\.dsh\backups\dsh-chat-image-lightbox-1.8.0-20261020-221302\`）：
+**完整备份**（`C:\Users\<user>\.dsh\backups\dsh-chat-image-lightbox-1.8.0-20261020-221302\`）：
 
 | 文件 | 作用 |
 |---|---|
@@ -1069,7 +1076,7 @@ node test/run-all.mjs --full   # 再加实验室 11 套件
 
 ### 教训（补充）
 
-5. **「改完记得跑测试」靠记忆一定会漏**。旧方案是散在 `E:\tmp\lightbox-lab` 的 11 个脚本，没有任何清单，改动者只能凭印象挑几个跑（本轮之前就出现过只跑 4 个就宣称全绿）。做成 `run-all.mjs` + 固定期望数（`expect` 字段）后，"少跑"和"跑少了"都会暴露。
+5. **「改完记得跑测试」靠记忆一定会漏**。旧方案是散在 `<local-temp>\lightbox-lab` 的 11 个脚本，没有任何清单，改动者只能凭印象挑几个跑（本轮之前就出现过只跑 4 个就宣称全绿）。做成 `run-all.mjs` + 固定期望数（`expect` 字段）后，"少跑"和"跑少了"都会暴露。
 6. **备份不是拷一份 zip 就完事**。真正的风险是「回不去」：只拷源码 ⇒ 丢了 git 历史；只拷 git ⇒ `.git` 损坏时全丢；只拷关键文件 ⇒ 测试脚本没了、改完无法验证。所以本轮存了三层（zip / bundle / 散装）+ 测试资产 + 依赖。
 
 ## 1.7.9 — 2026-10-19
