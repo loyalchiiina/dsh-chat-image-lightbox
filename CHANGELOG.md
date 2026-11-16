@@ -1,3 +1,9 @@
+## 1.9.5 (2026-11-16)
+
+### 图标配色：写死品牌色，深色主题下不再看不清
+
+- 根因：原 `icon.svg` 用 `stroke="currentColor"`，而 DSH 以 `<img>` / CSS `background-image`（data-URI）方式渲染插件图标，SVG 作为独立文档时 `currentColor` 取初始值黑色 —— 深色主题深底上几乎不可见。
+- 改法：`currentColor` → 写死品牌色 `#7C5CF5`；几何、`viewBox`、线宽一律不变；浅色（#F2F3F5）与深色（#212227）两种底色实测均清晰。
 ## 1.9.4
 
 ### 新增
