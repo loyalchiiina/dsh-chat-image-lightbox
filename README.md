@@ -58,6 +58,13 @@ dsh plugin --profile desktop add dsh-chat-image-lightbox
 
 ## 效果预览 · Screenshots
 
+### 效果视频 · Demo video
+
+https://github.com/loyalchiiina/dsh-chat-image-lightbox/blob/main/docs/images/lightbox-demo.mp4
+
+> 从缩略图网格点开灯箱、滚轮放大、拖动平移、左右切图的完整操作演示（无声，约 1 分钟，1280 宽）。
+> A silent walkthrough: open the lightbox from a thumbnail grid, zoom with the wheel, drag to pan, and page between images.
+
 ### 灯箱查看 · Full-screen lightbox
 
 ![灯箱全屏查看](docs/images/lightbox.png)
