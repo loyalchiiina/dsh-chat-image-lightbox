@@ -10,6 +10,8 @@
 
 ### 效果视频 · Demo video
 
+> 📌 **适配版本**：适配最新 DSH 内核 **0.2.2-rc.1**（`dsh` 引擎声明 `>=0.1.7-0 <0.3.0`）。
+
 https://github.com/loyalchiiina/dsh-chat-image-lightbox/blob/main/docs/images/lightbox-demo.mp4
 
 > 从缩略图网格点开灯箱、滚轮放大、拖动平移、左右切图的完整操作演示（无声，约 1 分钟）。
